@@ -1,7 +1,7 @@
 # Generates the Twin Home Buyer Inbound Retell AI Call Flow v2.1 flowchart as one large SVG.
 import textwrap, pathlib
 
-W, H = 3560, 4980
+W, H = 3560, 5500
 SANS = "Archivo, 'Helvetica Neue', Helvetica, Arial, sans-serif"
 MONO = "'IBM Plex Mono', ui-monospace, 'Courier New', monospace"
 
@@ -184,7 +184,7 @@ label(1104, 218, "Call Flow", 30, INK, wt=700)
 label(1104, 274, "v2.1", 40, "#1F6FB2", MONO, 700)
 e(f'<line x1="1104" y1="298" x2="1436" y2="298" stroke="{RULE}" stroke-width="2"/>')
 for i, (k, v) in enumerate([("STATUS", "Updated Build Map"),
-                            ("BUILD / RETELL", "Current Builder"),
+                            ("BUILD / RETELL", "Rosanes"),
                             ("APPROVAL", "Juan")]):
     label(1104, 330 + i * 40, k, 15, FAINT, MONO, 700)
     label(1104, 352 + i * 40, v, 20, INK, wt=600)
@@ -389,12 +389,12 @@ for (cap, extra, nn, dest, tn, pend), lx0 in zip(LANES, lane_x):
     call_arrow([(2100, 2560), (lx0 + 116, 2560), (lx0 + 116, 2600)],
                label=cap.split(" ·")[0], lx=lx0 + 116, ly=2548, anchor="middle")
 call_arrow([(2180, 1652), (2100, 1652), (2100, 2560)], label="6 – 10", lx=2088, ly=2110, anchor="end")
-note(3168, 3198, 232, 172, "Never convert a plumbing caller into a Twin Home Buyer seller lead on this call.",
-     title="KEEP SEPARATE")
+note(3168, 3198, 232, 172, "Never convert a plumbing caller into a seller lead — even if they mention selling. See H6.",
+     title="H6 · KEEP SEPARATE")
 
 # =========================== GLOBAL HARD STOPS ==========================
-band(140, 3420, 3280, 1020, "GLOBAL HARD STOPS",
-     "G-DNC · G-LEGAL · G-MAILER · G-HUMAN  —  these interrupt the call from ANY conversation node above")
+band(140, 3420, 3280, 1530, "GLOBAL HARD STOPS",
+     "G-DNC · G-LEGAL · G-MAILER · G-HUMAN · H4 · H6  —  these interrupt the call from ANY conversation node above")
 for bx in range(360, 3300, 300):
     notify_arrow([(bx, 3420), (bx, 3386)], colour="#A93529")
 
@@ -437,8 +437,8 @@ ending(2880, 3800, 540, 160, "T22", "Legal / agency / mailer escalation logged",
 notify_arrow([(2840, 3880), (2880, 3880)])
 
 # --- G-HUMAN lane
-node(200, 4100, 500, 150, "stop", nid="G-HUMAN",
-     title="Caller asks for a human · hostile caller · intent still unclear after 2 attempts")
+node(200, 4090, 500, 170, "stop", nid="G-HUMAN",
+     title="Caller asks for a human · hostile caller · caller is a minor · intent still unclear after 2 attempts")
 diamond(1020, 4175, 520, 160, nid="Q13", title="Approved human available now?")
 call_arrow([(700, 4175), (760, 4175)], colour="#A93529")
 node(1340, 4090, 380, 130, "transfer", nid="X5", title="TRANSFER CALL → approved human",
@@ -453,40 +453,69 @@ call_arrow([(1280, 4175), (1310, 4175), (1310, 4335), (1340, 4335)],
            label="NO", lx=1316, ly=4300, anchor="start")
 ending(1760, 4270, 340, 130, "T24", "Human escalation callback logged", "#A8730A")
 notify_arrow([(1720, 4335), (1760, 4335)])
-note(2180, 4100, 1240, 150, "Destination for the human escalation transfer is not yet confirmed. Until it is, "
-     "capture the name and callback number and raise the callback notification.",
+note(2180, 4090, 1240, 170, "All four triggers stop seller qualification immediately, including a caller who "
+     "is a minor. The destination for the human escalation transfer is not yet confirmed — until it is, capture "
+     "the name and callback number and raise the callback notification.",
      colour="#A8730A", fill="#FDF7EA", title="PENDING CONFIRMATION")
 
 
+# --- H4 · price / offer / valuation
+node(200, 4460, 500, 170, "stop", nid="H4",
+     title="PRICE / OFFER / VALUATION — caller asks for a price, an offer, a home value or a valuation")
+node(760, 4460, 620, 170, "action", nid="RULE",
+     title="The AI must NOT invent or provide a price, offer, home value or valuation. No number, no range, no estimate, no “somewhere around”.")
+call_arrow([(700, 4545), (760, 4545)], colour="#A93529")
+node(1440, 4460, 620, 170, "action", nid="→ SELLER",
+     title="Route into the approved seller → Juan transfer / callback process",
+     vars_="re-enters S1 – S6 → Q3 · endings T2 – T6")
+call_arrow([(1380, 4545), (1440, 4545)], colour="#1F6FB2")
+note(2120, 4460, 1300, 170, "A valuation is never given on this call, and the caller is not simply turned away. "
+     "The question is a buying signal: hand it to the seller flow so Juan does the pricing conversation.",
+     colour="#1F6FB2", fill="#EAF2F9", title="H4 RULE")
+
+# --- H6 · plumbing selling motivation
+node(200, 4690, 500, 190, "stop", nid="H6",
+     title="PLUMBING SELLING MOTIVATION — caller entered through the Peninsula Plumbing branch and later mentions wanting to sell the property")
+node(760, 4690, 620, 190, "action", nid="RULE",
+     title="Do NOT convert the call into a Twin Home Buyer seller lead. Do not start seller qualification. Do not transfer to Juan.")
+call_arrow([(700, 4785), (760, 4785)], colour="#A93529")
+ending(1440, 4710, 620, 150, "T19", "Stay in the Peninsula Plumbing flow",
+       "#A8730A", "same ending as the plumbing lane")
+call_arrow([(1380, 4785), (1440, 4785)], colour="#A8730A")
+note(2120, 4690, 1300, 190, "The plumbing branch and the Twin Home Buyer seller pipeline never cross, whichever "
+     "direction the caller drifts. If a plumbing caller wants to sell, that is a separate future Twin Home Buyer "
+     "call — not this one. Log it in the plumbing record only.",
+     colour="#A8730A", fill="#FDF7EA", title="H6 RULE")
+
 # =========================== BOTTOM PANELS ==============================
-panel(140, 4500, 1560, 400, "EXISTING INTEGRATIONS  —  shown for reference, not redesigned")
-node(200, 4620, 260, 100, "action", nid="RETELL", title="call data")
-node(520, 4620, 260, 100, "notify", nid="ZAPIER", title="automation layer")
-notify_arrow([(460, 4670), (520, 4670)])
-for yy, nm in [(4560, "REI BLACKBOOK"), (4670, "GOOGLE SHEETS"), (4780, "JUAN GOOGLE CALENDAR")]:
+panel(140, 5000, 1560, 400, "EXISTING INTEGRATIONS  —  shown for reference, not redesigned")
+node(200, 5120, 260, 100, "action", nid="RETELL", title="call data")
+node(520, 5120, 260, 100, "notify", nid="ZAPIER", title="automation layer")
+notify_arrow([(460, 5170), (520, 5170)])
+for yy, nm in [(5060, "REI BLACKBOOK"), (5170, "GOOGLE SHEETS"), (5280, "JUAN GOOGLE CALENDAR")]:
     e(f'<rect x="840" y="{yy}" width="320" height="90" rx="4" fill="#F1F4F8" stroke="#7E8896" stroke-width="2"/>')
     e(lines_block(1000, yy + 45, [([nm], MONO, 18, 700, INK)]))
-    notify_arrow([(780, 4670), (810, 4670), (810, yy + 45), (840, yy + 45)])
-label(1200, 4590, "Lead and intake capture flows out through Zapier.", 19, INK, wt=600)
-label(1200, 4620, "Property / address information may also feed the", 18, DIM)
-label(1200, 4646, "existing Google Sheet automation. After-hours seller", 18, DIM)
-label(1200, 4672, "appointments use the existing Juan calendar automation.", 18, DIM)
-label(1200, 4730, "These are notification / data paths — dashed.", 18, "#A8730A", MONO, 600)
-label(1200, 4756, "No live call is ever transferred through them.", 18, "#A8730A", MONO, 600)
+    notify_arrow([(780, 5170), (810, 5170), (810, yy + 45), (840, yy + 45)])
+label(1200, 5090, "Lead and intake capture flows out through Zapier.", 19, INK, wt=600)
+label(1200, 5120, "Property / address information may also feed the", 18, DIM)
+label(1200, 5146, "existing Google Sheet automation. After-hours seller", 18, DIM)
+label(1200, 5172, "appointments use the existing Juan calendar automation.", 18, DIM)
+label(1200, 5230, "These are notification / data paths — dashed.", 18, "#A8730A", MONO, 600)
+label(1200, 5256, "No live call is ever transferred through them.", 18, "#A8730A", MONO, 600)
 
-panel(1740, 4500, 760, 400, "SHARED ENDINGS")
-ending(1780, 4590, 680, 130, "T25", "Transfer technical failure — information saved, intended owner and Juan notified",
+panel(1740, 5000, 760, 400, "SHARED ENDINGS")
+ending(1780, 5090, 680, 130, "T25", "Transfer technical failure — information saved, intended owner and Juan notified",
        "#A8730A", "reachable from X1 · X2 · X3 · X4 · X5")
-ending(1780, 4750, 680, 130, "T26", "Caller hung up / disconnected — partial capture saved",
+ending(1780, 5250, 680, 130, "T26", "Caller hung up / disconnected — partial capture saved",
        "#A8730A", "reachable from any conversation node")
 
-panel(2560, 4500, 860, 400, "PENDING CONFIRMATION")
-py = 4600
+panel(2560, 5000, 860, 400, "PENDING CONFIRMATION")
+py = 5100
 for item, where in [
     ("Juan transfer cutoff / hours", "Q4 · T4"),
     ("Seller transfer qualification criteria", "Q3 · T5"),
     ("Property-condition question approved?", "S6"),
-    ("Human escalation destination", "X5 · Q13 · T23"),
+    ("Human / minor-caller escalation dest.", "X5 · Q13 · T23"),
     ("Past-client / buyer / vendor owners", "N7 · N8 · N9"),
     ("Callback SLAs", "T3 · T10 · T12 · T24"),
     ("Peninsula Plumbing live transfer allowed?", "T19"),

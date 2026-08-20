@@ -2,7 +2,24 @@
 
 Build reference for the Twin Home Buyer Retell AI inbound voice agent.
 
-## Current deliverable — v2.1
+## Phase 1 — build and approve this first
+
+| File | What it is |
+|---|---|
+| [`docs/twin-home-buyer-phase1-seller-flow.svg`](docs/twin-home-buyer-phase1-seller-flow.svg) | **Phase 1 seller flow.** New Seller + Seller Callback only. |
+| `docs/twin-home-buyer-phase1-seller-flow.html` | Same chart, zoomable. |
+| `docs/twin-home-buyer-phase1-seller-flow.pdf` | Same chart, one sheet for printing. |
+
+Cherry reviews Phase 1 before the rest of the Retell system is built. The rules that matter most:
+
+- The **Google Chat live alert** to Juan and Cherry fires the moment the caller is classified, and it
+  **never pauses the AI conversation**.
+- **A claim does not interrupt the call.** If Juan or Cherry sends TRANSFER while the seller is
+  talking, it becomes a *pending* transfer. The AI finishes the answer, completes the required
+  intake, and only then makes the handoff statement.
+- **Nobody claims → callback.** The AI never sits silently waiting.
+
+## Full inbound map — v2.1
 
 | File | What it is |
 |---|---|
@@ -11,7 +28,7 @@ Build reference for the Twin Home Buyer Retell AI inbound voice agent.
 | `docs/Twin-Home-Buyer-Call-Flow-v2.1.pdf` | Same chart, one 22 × 30.8 in sheet for printing. |
 | `docs/Twin-Home-Buyer-Call-Flow-v2.1.png` | Same chart as an image. |
 
-Status: **Updated Build Map** · Build / Retell implementation: **Current Builder** · Approval: **Juan**
+Status: **Updated Build Map** · Build / Retell implementation: **Rosanes** · Approval: **Juan**
 
 ## The rules that govern the build
 
@@ -22,7 +39,12 @@ Status: **Updated Build Map** · Build / Retell implementation: **Current Builde
    callbacks where appropriate, active contract / escrow, and title / escrow / lender.
 4. **Legal, agency and mailer hard stops send `N14` — an email notification to the Twin Home
    Buyer team: Cherry, Bryan, Thea, MC.** No live call transfers from that node.
-5. Anything marked **PENDING CONFIRMATION** is not approved and must not be built as a guess.
+5. **`H4` — never give a price, offer, home value or valuation.** A caller asking for one is routed
+   into the approved seller → Juan transfer / callback process.
+6. **`H6` — a plumbing caller who mentions selling stays a plumbing caller.** Never convert the call
+   into a Twin Home Buyer seller lead; it ends at `T19`.
+7. **A caller who is a minor** stops seller qualification and goes to human escalation (`G-HUMAN`).
+8. Anything marked **PENDING CONFIRMATION** is not approved and must not be built as a guess.
 
 ## Superseded
 
