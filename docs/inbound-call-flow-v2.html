@@ -1,0 +1,988 @@
+<title>Twin Home Buyer Inbound Call Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  :root{
+    --bg:#EEF1F5; --surface:#FFFFFF; --surface-2:#F7F9FB; --surface-3:#E7ECF2;
+    --border:#D6DDE6; --border-strong:#B9C4D1;
+    --text:#111823; --text-dim:#5A6577; --text-faint:#8A94A3;
+    --action:#1F6FB2; --decision:#141C27; --success:#16785A;
+    --notify:#9A6A08; --stop:#A93529; --extract:#63459C;
+    --action-soft:#E8F1F9; --success-soft:#E4F1EC; --notify-soft:#FAF1DE;
+    --stop-soft:#FAE9E7; --extract-soft:#EFEAF8; --decision-soft:#E4E8ED;
+    --rail:#DCE3EB;
+    --sans:"Archivo",ui-sans-serif,system-ui,sans-serif;
+    --serif:"Source Serif 4",Georgia,serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0D1218; --surface:#151C25; --surface-2:#1A222D; --surface-3:#212B37;
+      --border:#2A3340; --border-strong:#3C4757;
+      --text:#E3E9F1; --text-dim:#9AA5B4; --text-faint:#6D7887;
+      --action:#5FA9E2; --decision:#C7D0DC; --success:#48B78C;
+      --notify:#DFA83C; --stop:#E4705F; --extract:#AC8DE4;
+      --action-soft:#152634; --success-soft:#12291F; --notify-soft:#2C2314;
+      --stop-soft:#301813; --extract-soft:#221B33; --decision-soft:#222B37;
+      --rail:#212A35;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0D1218; --surface:#151C25; --surface-2:#1A222D; --surface-3:#212B37;
+    --border:#2A3340; --border-strong:#3C4757;
+    --text:#E3E9F1; --text-dim:#9AA5B4; --text-faint:#6D7887;
+    --action:#5FA9E2; --decision:#C7D0DC; --success:#48B78C;
+    --notify:#DFA83C; --stop:#E4705F; --extract:#AC8DE4;
+    --action-soft:#152634; --success-soft:#12291F; --notify-soft:#2C2314;
+    --stop-soft:#301813; --extract-soft:#221B33; --decision-soft:#222B37;
+    --rail:#212A35;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--serif); font-size:16px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .shell{max-width:1240px; margin:0 auto; padding:0 20px 96px;
+    display:grid; grid-template-columns:1fr; gap:0}
+  @media (min-width:1080px){
+    .shell{grid-template-columns:212px minmax(0,1fr); gap:44px; padding:0 32px 120px}
+  }
+
+  /* ---------- title block ---------- */
+  .titleblock{grid-column:1/-1; margin:28px 0 40px; background:var(--surface);
+    border:1px solid var(--border); border-top:3px solid var(--action)}
+  .tb-head{padding:22px 24px 18px; border-bottom:1px solid var(--border)}
+  .eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--text-faint); margin:0 0 10px}
+  h1{font-family:var(--sans); font-weight:700; font-size:clamp(26px,4.2vw,40px);
+    line-height:1.08; letter-spacing:-.02em; margin:0; text-wrap:balance}
+  h1 .ver{color:var(--action)}
+  .tb-sub{font-size:16px; color:var(--text-dim); margin:12px 0 0; max-width:62ch}
+  .tb-grid{display:grid; grid-template-columns:repeat(2,1fr)}
+  @media (min-width:720px){.tb-grid{grid-template-columns:repeat(4,1fr)}}
+  .tb-cell{padding:14px 24px; border-right:1px solid var(--border);
+    border-bottom:1px solid var(--border)}
+  .tb-cell:last-child{border-right:0}
+  .tb-k{font-family:var(--mono); font-size:10px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--text-faint); display:block; margin-bottom:4px}
+  .tb-v{font-family:var(--sans); font-size:14px; font-weight:600; color:var(--text)}
+  .tb-note{padding:16px 24px; font-family:var(--sans); font-size:14px; font-weight:500;
+    background:var(--stop-soft); color:var(--text); border-left:4px solid var(--stop)}
+  .tb-note b{color:var(--stop)}
+
+  /* ---------- nav rail ---------- */
+  nav{display:none}
+  @media (min-width:1080px){
+    nav{display:block; align-self:start; position:sticky; top:24px; padding-top:4px}
+    nav ol{list-style:none; margin:0; padding:0; border-left:2px solid var(--rail)}
+    nav a{display:block; padding:6px 0 6px 14px; margin-left:-2px;
+      border-left:2px solid transparent; font-family:var(--sans); font-size:13px;
+      color:var(--text-dim); text-decoration:none; line-height:1.35}
+    nav a:hover,nav a:focus-visible{color:var(--action); border-left-color:var(--action)}
+    nav a .n{font-family:var(--mono); font-size:11px; color:var(--text-faint); margin-right:7px}
+  }
+
+  main{min-width:0}
+  section{margin:0 0 60px; scroll-margin-top:20px}
+  h2{font-family:var(--sans); font-weight:700; font-size:24px; letter-spacing:-.012em;
+    margin:0 0 6px; display:flex; gap:12px; align-items:baseline; text-wrap:balance}
+  h2 .num{font-family:var(--mono); font-size:13px; font-weight:500; color:var(--action);
+    letter-spacing:.06em}
+  h3{font-family:var(--sans); font-weight:600; font-size:17px; letter-spacing:-.005em;
+    margin:34px 0 10px}
+  .lede{color:var(--text-dim); max-width:68ch; margin:0 0 22px}
+  p{max-width:68ch}
+  a{color:var(--action)}
+  code,.mono{font-family:var(--mono); font-size:.88em}
+  code{background:var(--surface-3); padding:1px 5px; border-radius:2px}
+  strong{font-weight:600}
+
+  /* ---------- legend ---------- */
+  .legend{display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(215px,1fr))}
+  .lg{background:var(--surface); border:1px solid var(--border); border-top:3px solid;
+    padding:12px 14px}
+  .lg .t{font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.1em;
+    text-transform:uppercase; margin-bottom:4px}
+  .lg .d{font-size:13.5px; color:var(--text-dim); line-height:1.45}
+  .lg .r{font-family:var(--mono); font-size:11px; color:var(--text-faint); margin-top:7px;
+    display:block; border-top:1px solid var(--border); padding-top:7px}
+  .lg.action{border-top-color:var(--action)} .lg.action .t{color:var(--action)}
+  .lg.decision{border-top-color:var(--decision)} .lg.decision .t{color:var(--text)}
+  .lg.success{border-top-color:var(--success)} .lg.success .t{color:var(--success)}
+  .lg.notify{border-top-color:var(--notify)} .lg.notify .t{color:var(--notify)}
+  .lg.stop{border-top-color:var(--stop)} .lg.stop .t{color:var(--stop)}
+  .lg.extract{border-top-color:var(--extract)} .lg.extract .t{color:var(--extract)}
+
+  /* ---------- figures ---------- */
+  figure{margin:0 0 26px; background:var(--surface); border:1px solid var(--border);
+    padding:20px 20px 14px}
+  figure.scroll{overflow-x:auto}
+  figure svg{display:block; max-width:100%; height:auto; margin:0 auto; color:var(--text-dim)}
+  figcaption{font-family:var(--sans); font-size:13px; color:var(--text-dim);
+    margin-top:14px; padding-top:12px; border-top:1px solid var(--border); line-height:1.5}
+  figcaption b{color:var(--text); font-weight:600}
+  .mermaid{min-width:640px; margin:0 auto; text-align:center}
+  .diagram{background:var(--surface); border:1px solid var(--border); margin:0 0 26px}
+  .diagram-head{display:flex; flex-wrap:wrap; gap:8px 14px; align-items:baseline;
+    padding:14px 18px; border-bottom:1px solid var(--border); background:var(--surface-2)}
+  .diagram-head .id{font-family:var(--mono); font-size:11px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--action); font-weight:600}
+  .diagram-head .nm{font-family:var(--sans); font-size:15px; font-weight:600}
+  .diagram-body{padding:18px 12px; overflow-x:auto}
+
+  /* ---------- tables ---------- */
+  .tw{overflow-x:auto; border:1px solid var(--border); background:var(--surface); margin:0 0 24px}
+  table{border-collapse:collapse; width:100%; min-width:660px; font-family:var(--sans);
+    font-size:13.5px}
+  thead th{background:var(--surface-2); text-align:left; font-weight:600; font-size:11px;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim);
+    padding:11px 14px; border-bottom:1px solid var(--border-strong); white-space:nowrap}
+  td{padding:11px 14px; border-bottom:1px solid var(--border); vertical-align:top;
+    line-height:1.45}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:var(--surface-2)}
+  td.id,th.id{font-family:var(--mono); font-weight:600; white-space:nowrap; font-size:12.5px}
+  td.mono{font-family:var(--mono); font-size:12px}
+  .yes{color:var(--success); font-weight:600}
+  .no{color:var(--text-faint)}
+  .pend{font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; font-weight:600;
+    text-transform:uppercase; color:var(--notify); background:var(--notify-soft);
+    border:1px solid var(--notify); padding:1px 5px; white-space:nowrap; display:inline-block}
+  .tag{font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; font-weight:600;
+    text-transform:uppercase; padding:2px 6px; white-space:nowrap; display:inline-block;
+    border:1px solid}
+  .tag.xfer{color:var(--success); background:var(--success-soft); border-color:var(--success)}
+  .tag.notif{color:var(--notify); background:var(--notify-soft); border-color:var(--notify)}
+  .tag.hard{color:var(--stop); background:var(--stop-soft); border-color:var(--stop)}
+  .tag.none{color:var(--text-faint); background:var(--surface-2); border-color:var(--border-strong)}
+
+  /* ---------- callout ---------- */
+  .callout{border:1px solid var(--border); border-left:4px solid var(--stop);
+    background:var(--stop-soft); padding:16px 18px; margin:0 0 24px}
+  .callout.info{border-left-color:var(--action); background:var(--action-soft)}
+  .callout h4{font-family:var(--sans); font-size:14px; font-weight:700; margin:0 0 6px;
+    letter-spacing:.02em}
+  .callout p{margin:0; font-size:14.5px; max-width:70ch}
+  .callout p + p{margin-top:8px}
+  .rules{list-style:none; margin:0; padding:0; display:grid; gap:8px}
+  .rules li{display:flex; gap:10px; align-items:flex-start; font-family:var(--sans);
+    font-size:14px; line-height:1.5}
+  .rules .mk{font-family:var(--mono); font-weight:700; flex:0 0 auto; width:16px}
+  .rules .do .mk{color:var(--success)} .rules .dont .mk{color:var(--stop)}
+
+  ul.plain{padding-left:20px; max-width:68ch}
+  ul.plain li{margin-bottom:6px}
+  .footer{grid-column:1/-1; border-top:1px solid var(--border); margin-top:24px;
+    padding-top:18px; font-family:var(--sans); font-size:13px; color:var(--text-faint)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important; animation:none!important}}
+</style>
+
+<div class="shell">
+
+  <header class="titleblock">
+    <div class="tb-head">
+      <p class="eyebrow">Retell AI Conversation Flow · Build specification</p>
+      <h1>Twin Home Buyer Inbound Call Flow <span class="ver">v2.0</span></h1>
+      <p class="tb-sub">Every inbound call, from the third ring to a named ending. Built to be
+        reproduced node-for-node inside Retell AI Conversation Flow.</p>
+    </div>
+    <div class="tb-grid">
+      <div class="tb-cell"><span class="tb-k">Supersedes</span><span class="tb-v">v1.0</span></div>
+      <div class="tb-cell"><span class="tb-k">Build / Retell implementation</span><span class="tb-v">[CURRENT BUILDER]</span></div>
+      <div class="tb-cell"><span class="tb-k">Approve</span><span class="tb-v">Juan</span></div>
+      <div class="tb-cell"><span class="tb-k">Status</span><span class="tb-v">Draft for approval</span></div>
+    </div>
+    <p class="tb-note"><b>One rule governs this document.</b> A <b>Transfer Call</b> moves the live
+      caller. A <b>Send Notification</b> moves information only. Gen is a transfer destination.
+      Sabelli is a notification and review recipient — there is no transfer node for Sabelli
+      anywhere in this build.</p>
+  </header>
+
+  <nav aria-label="Contents">
+    <ol>
+      <li><a href="#changed"><span class="n">01</span>What changed</a></li>
+      <li><a href="#legend"><span class="n">02</span>Legend</a></li>
+      <li><a href="#entry"><span class="n">03</span>Call arrival and intent</a></li>
+      <li><a href="#seller"><span class="n">04</span>Seller flow</a></li>
+      <li><a href="#realtor"><span class="n">05</span>Realtor to Gen</a></li>
+      <li><a href="#nonseller"><span class="n">06</span>Non-seller routing</a></li>
+      <li><a href="#hardstop"><span class="n">07</span>Global hard stops</a></li>
+      <li><a href="#nodemap"><span class="n">08</span>Retell node map</a></li>
+      <li><a href="#conversation"><span class="n">09</span>Conversation nodes</a></li>
+      <li><a href="#decision"><span class="n">10</span>Decision nodes</a></li>
+      <li><a href="#global"><span class="n">11</span>Global nodes</a></li>
+      <li><a href="#transfer"><span class="n">12</span>Transfer Call nodes</a></li>
+      <li><a href="#notify"><span class="n">13</span>Notification nodes</a></li>
+      <li><a href="#vars"><span class="n">14</span>Extract variables</a></li>
+      <li><a href="#endings"><span class="n">15</span>Ending nodes</a></li>
+      <li><a href="#pending"><span class="n">16</span>Pending confirmation</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <section id="changed">
+    <h2><span class="num">01</span>What changed from v1.0</h2>
+    <p class="lede">Two routing corrections drive this revision. Both are drawn below before
+      anything else, because a builder who gets only these two right has fixed the errors that
+      mattered.</p>
+
+    <figure class="scroll">
+      <svg viewBox="0 0 850 236" role="img" aria-label="Realtor and agent calls no longer route to Mariaelena; in version 2.0 they transfer to Gen, and when Gen is unavailable a callback notification is sent to Gen.">
+        <defs>
+          <marker id="b-gray" viewBox="0 0 9 9" refX="8" refY="4.5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L9,4.5 L0,9 z" fill="#8A94A3"/>
+          </marker>
+          <marker id="b-green" viewBox="0 0 9 9" refX="8" refY="4.5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L9,4.5 L0,9 z" fill="#16785A"/>
+          </marker>
+          <marker id="b-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0.5,0.5 L9,5 L0.5,9.5" fill="none" stroke="#9A6A08" stroke-width="1.6"/>
+          </marker>
+        </defs>
+
+        <text x="16" y="16" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.4" fill="#8A94A3">V1.0 — RETIRED ROUTING</text>
+        <rect x="16" y="26" width="190" height="52" fill="none" stroke="#8A94A3" stroke-width="1.4"/>
+        <text x="111" y="49" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="600" fill="#8A94A3">REALTOR / AGENT</text>
+        <text x="111" y="65" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#8A94A3">caller_intent = 3</text>
+        <line x1="206" y1="52" x2="372" y2="52" stroke="#8A94A3" stroke-width="1.4" marker-end="url(#b-gray)"/>
+        <line x1="281" y1="42" x2="301" y2="62" stroke="#A93529" stroke-width="2.4"/>
+        <line x1="301" y1="42" x2="281" y2="62" stroke="#A93529" stroke-width="2.4"/>
+        <rect x="380" y="26" width="180" height="52" fill="none" stroke="#8A94A3" stroke-width="1.4"/>
+        <text x="470" y="57" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="600" fill="#8A94A3">MARIAELENA</text>
+        <line x1="388" y1="72" x2="552" y2="32" stroke="#A93529" stroke-width="1.6"/>
+        <text x="580" y="49" font-family="Archivo, sans-serif" font-size="12" font-weight="600" fill="#A93529">Do not rebuild.</text>
+        <text x="580" y="65" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="#8A94A3">endings T7 / T8 retired</text>
+
+        <line x1="16" y1="104" x2="834" y2="104" stroke="#D6DDE6" stroke-width="1"/>
+
+        <text x="16" y="130" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1.4" fill="#16785A">V2.0 — APPROVED ROUTING</text>
+        <rect x="16" y="140" width="190" height="52" fill="none" stroke="#1F6FB2" stroke-width="1.8"/>
+        <text x="111" y="163" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="600" fill="#1F6FB2">REALTOR / AGENT</text>
+        <text x="111" y="179" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#1F6FB2">R1 → R4 capture</text>
+        <line x1="206" y1="166" x2="372" y2="166" stroke="#16785A" stroke-width="2" marker-end="url(#b-green)"/>
+        <text x="289" y="157" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing=".8" fill="#16785A">X2 · TRANSFER CALL</text>
+        <text x="289" y="184" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#8A94A3">the live call moves</text>
+        <rect x="380" y="140" width="180" height="52" fill="#16785A" stroke="#16785A" stroke-width="1.8"/>
+        <text x="470" y="164" text-anchor="middle" font-family="Archivo, sans-serif" font-size="16" font-weight="700" fill="#FFFFFF">GEN</text>
+        <text x="470" y="180" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#FFFFFF">ending T9</text>
+        <line x1="560" y1="166" x2="616" y2="166" stroke="#9A6A08" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#b-amber)"/>
+        <text x="588" y="157" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9.5" fill="#9A6A08">if busy</text>
+        <rect x="624" y="140" width="210" height="52" fill="none" stroke="#9A6A08" stroke-width="1.8" stroke-dasharray="6 4"/>
+        <text x="729" y="163" text-anchor="middle" font-family="Archivo, sans-serif" font-size="12.5" font-weight="600" fill="#9A6A08">N4 · NOTIFY GEN</text>
+        <text x="729" y="179" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#9A6A08">callback request · ending T10</text>
+      </svg>
+      <figcaption><b>Change 1 — the realtor destination.</b> Realtor and agent calls transfer to
+        <b>Gen</b>, never to Mariaelena and never to Sabelli. A solid arrow is a live call; a dashed
+        arrow is a message. Gen is the owner on both outcomes.</figcaption>
+    </figure>
+
+    <figure class="scroll">
+      <svg viewBox="0 0 850 322" role="img" aria-label="Gen and Juan receive live transferred calls over solid audio paths. Sabelli receives only a dashed notification from the T22 escalation, with no call path.">
+        <defs>
+          <marker id="c-ink" viewBox="0 0 9 9" refX="8" refY="4.5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L9,4.5 L0,9 z" fill="currentColor"/>
+          </marker>
+          <marker id="c-green" viewBox="0 0 9 9" refX="8" refY="4.5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L9,4.5 L0,9 z" fill="#16785A"/>
+          </marker>
+          <marker id="c-red" viewBox="0 0 9 9" refX="8" refY="4.5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L9,4.5 L0,9 z" fill="#A93529"/>
+          </marker>
+          <marker id="c-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0.5,0.5 L9,5 L0.5,9.5" fill="none" stroke="#9A6A08" stroke-width="1.6"/>
+          </marker>
+        </defs>
+
+        <rect x="16" y="128" width="150" height="54" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <text x="91" y="152" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="600" fill="currentColor">Caller</text>
+        <text x="91" y="168" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="currentColor">tracking number</text>
+        <line x1="166" y1="155" x2="216" y2="155" stroke="currentColor" stroke-width="1.4" marker-end="url(#c-ink)"/>
+
+        <rect x="224" y="128" width="170" height="54" fill="#1F6FB2" stroke="#1F6FB2" stroke-width="1.6"/>
+        <text x="309" y="152" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">A2 · Retell AI</text>
+        <text x="309" y="168" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#FFFFFF">holds the live call</text>
+
+        <polyline points="394,155 500,155 500,60 636,60" fill="none" stroke="#16785A" stroke-width="2" marker-end="url(#c-green)"/>
+        <text x="508" y="48" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing=".8" fill="#16785A">TRANSFER CALL</text>
+        <rect x="644" y="34" width="190" height="52" fill="#16785A" stroke="#16785A" stroke-width="1.6"/>
+        <text x="739" y="57" text-anchor="middle" font-family="Archivo, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">GEN</text>
+        <text x="739" y="73" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#FFFFFF">realtor / agent calls</text>
+
+        <line x1="394" y1="155" x2="636" y2="155" stroke="#16785A" stroke-width="2" marker-end="url(#c-green)"/>
+        <text x="515" y="145" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing=".8" fill="#16785A">TRANSFER CALL</text>
+        <rect x="644" y="129" width="190" height="52" fill="#16785A" stroke="#16785A" stroke-width="1.6"/>
+        <text x="739" y="152" text-anchor="middle" font-family="Archivo, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">JUAN</text>
+        <text x="739" y="168" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#FFFFFF">seller and deal calls</text>
+
+        <line x1="309" y1="182" x2="309" y2="240" stroke="#A93529" stroke-width="2" marker-end="url(#c-red)"/>
+        <text x="318" y="216" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="#A93529">hard stop</text>
+        <rect x="224" y="248" width="170" height="54" fill="#A93529" stroke="#A93529" stroke-width="1.6"/>
+        <text x="309" y="272" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF">T22 · escalation</text>
+        <text x="309" y="288" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#FFFFFF">call ends here</text>
+
+        <line x1="394" y1="275" x2="636" y2="275" stroke="#9A6A08" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#c-amber)"/>
+        <text x="515" y="265" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing=".8" fill="#9A6A08">SEND NOTIFICATION</text>
+        <text x="515" y="292" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#9A6A08">transcript only — no audio path</text>
+        <rect x="644" y="249" width="190" height="54" fill="none" stroke="#9A6A08" stroke-width="2" stroke-dasharray="7 5"/>
+        <text x="739" y="271" text-anchor="middle" font-family="Archivo, sans-serif" font-size="12.5" font-weight="700" fill="#9A6A08">JUAN + SABELLI</text>
+        <text x="739" y="288" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#9A6A08">review recipients only</text>
+      </svg>
+      <figcaption><b>Change 2 — Sabelli is not a destination.</b> Gen and Juan sit at the end of
+        solid audio paths. Sabelli is reached only by the dashed notification leaving
+        <code>T22</code>, and only on approved legal, agency and mailer cases. Nothing in the build
+        connects a caller to Sabelli.</figcaption>
+    </figure>
+
+    <div class="tw">
+      <table>
+        <thead><tr><th class="id">#</th><th>Area</th><th>v1.0</th><th>v2.0</th></tr></thead>
+        <tbody>
+          <tr><td class="id">1</td><td>Realtor / agent routing</td><td>Realtor → <strong>Mariaelena</strong></td><td>Realtor → <strong>GEN</strong> <span class="mono">(X2 → T9 / T10)</span></td></tr>
+          <tr><td class="id">2</td><td>Sabelli</td><td>Treated as somebody callers could be sent to</td><td><strong>Notification and review recipient only</strong>, on approved <code>T22</code> cases. No transfer node exists.</td></tr>
+          <tr><td class="id">3</td><td>Legal / agency / mailer</td><td>Mixed into normal qualification</td><td>Isolated global layer <code>G-LEGAL</code> / <code>G-MAILER</code> → <code>T22</code> → Juan + Sabelli</td></tr>
+          <tr><td class="id">4</td><td>DNC</td><td>Handled ad hoc</td><td>Global node <code>G-DNC</code> → <code>T21</code>, sets <code>dnc_requested = true</code></td></tr>
+          <tr><td class="id">5</td><td>Endings</td><td>Some branches ran out without a disposition</td><td>24 named endings, every branch terminates</td></tr>
+          <tr><td class="id">6</td><td>Build owner</td><td>Build: Seth</td><td>Build / Retell implementation: <strong>[CURRENT BUILDER]</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Retired ending IDs.</strong> <code>T7</code> and <code>T8</code> were the v1.0
+      realtor-to-Mariaelena endings. They are retired, which is why the realtor branch now ends at
+      <code>T9</code> and <code>T10</code>.</p>
+  </section>
+
+  <section id="legend">
+    <h2><span class="num">02</span>Legend</h2>
+    <p class="lede">Six node styles, matching the Retell build. Shape carries the same information
+      as colour, so the flow still reads if it is printed in black and white.</p>
+    <div class="legend">
+      <div class="lg action"><div class="t">Blue</div><div class="d">Conversation and action nodes — what the AI says, and the records it writes.</div><span class="r">Retell: Conversation · Function</span></div>
+      <div class="lg decision"><div class="t">Dark</div><div class="d">Decision nodes. Every exit is labelled and every exit goes somewhere.</div><span class="r">Retell: Logic Split</span></div>
+      <div class="lg success"><div class="t">Green</div><div class="d">Successful transfer or completed outcome. The live call moved.</div><span class="r">Retell: Transfer Call · Ending</span></div>
+      <div class="lg notify"><div class="t">Yellow</div><div class="d">Notification and follow-up. Information moves, the call does not.</div><span class="r">Retell: Function — webhook</span></div>
+      <div class="lg stop"><div class="t">Red</div><div class="d">Hard stops — legal, agency, mailer, DNC. These override everything.</div><span class="r">Retell: Global node · Ending</span></div>
+      <div class="lg extract"><div class="t">Purple</div><div class="d">Extract variable and data capture. Named fields, confirmed where required.</div><span class="r">Retell: Extract Dynamic Variables</span></div>
+    </div>
+    <h3>Arrows</h3>
+    <ul class="rules">
+      <li class="do"><span class="mk">→</span><span><strong>Solid arrow — Transfer Call.</strong> The audio path moves with it. Only five of these exist in the whole build.</span></li>
+      <li class="dont"><span class="mk">⇢</span><span><strong>Dashed arrow — Send Notification.</strong> A webhook fires, the caller stays with the AI or the call ends. Sabelli is only ever reached this way.</span></li>
+    </ul>
+  </section>
+
+  <section id="entry">
+    <h2><span class="num">03</span>Call arrival and intent</h2>
+    <p class="lede">A human gets three rings. After that Retell answers, discloses that it is an AI
+      assistant and that the call is recorded, and then classifies the caller into one of fourteen
+      categories before anything else happens.</p>
+    <div class="diagram">
+      <div class="diagram-head"><span class="id">Diagram A</span><span class="nm">Call arrival and intent routing</span></div>
+      <div class="diagram-body">
+<pre class="mermaid">
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"curve":"basis","nodeSpacing":36,"rankSpacing":50,"useMaxWidth":true}}}%%
+flowchart TD
+  A1["A1 · Call arrives on a Twin Home Buyer tracking number"]:::action
+  V1[/"EXTRACT · source_channel, call_start_time, caller_id"/]:::extract
+  Q1{"Q1 · Did a human team member answer within 3 rings?"}:::decision
+  T1(["T1 · Human handled the call"]):::success
+  A2["A2 · Mandatory AI opening — discloses AI assistant and call recording before any substantive conversation"]:::action
+  Q2{"Q2 · Determine caller intent"}:::decision
+  V2[/"EXTRACT · caller_intent, intent_attempts"/]:::extract
+  SEL["Seller flow — Diagram B"]:::action
+  GEN["Realtor flow to Gen — Diagram C"]:::action
+  NON["Non-seller intake — Diagram D"]:::action
+  Q7{"Q7 · Intent clear after 2 attempts?"}:::decision
+  T20(["T20 · Spam or wrong number — polite end"]):::stop
+  GH(("G-HUMAN")):::stop
+  GLM(("G-LEGAL / G-MAILER")):::stop
+  GD(("G-DNC")):::stop
+
+  A1 --> V1 --> Q1
+  Q1 -->|"YES"| T1
+  Q1 -->|"NO or after hours"| A2
+  A2 --> Q2 --> V2
+  V2 -->|"1 New seller"| SEL
+  V2 -->|"2 Seller callback"| SEL
+  V2 -->|"3 Realtor or real estate agent"| GEN
+  V2 -->|"4 Active contract or escrow"| NON
+  V2 -->|"5 Title, escrow or lender"| NON
+  V2 -->|"6 Past client"| NON
+  V2 -->|"7 Buyer or investor"| NON
+  V2 -->|"8 Vendor or subcontractor"| NON
+  V2 -->|"9 Job applicant"| NON
+  V2 -->|"10 Peninsula Plumbing caller"| NON
+  V2 -->|"11 Spam or wrong number"| T20
+  V2 -->|"12 Unclear caller"| Q7
+  V2 -->|"13 Legal, agency or mailer"| GLM
+  V2 -->|"14 DNC request"| GD
+  Q7 -->|"YES · reclassify"| Q2
+  Q7 -->|"NO · two failed attempts"| GH
+
+  classDef action fill:#1F6FB2,stroke:#17578C,color:#FFFFFF
+  classDef decision fill:#1C2530,stroke:#6B7787,color:#FFFFFF
+  classDef success fill:#16785A,stroke:#0F5B45,color:#FFFFFF
+  classDef notify fill:#A8730A,stroke:#835A07,color:#FFFFFF
+  classDef stop fill:#A93529,stroke:#87281E,color:#FFFFFF
+  classDef extract fill:#63459C,stroke:#4C3479,color:#FFFFFF
+</pre>
+      </div>
+    </div>
+    <div class="callout info">
+      <h4>The opening is not optional</h4>
+      <p><code>A2</code> must disclose the AI assistant and the recording before any substantive
+        conversation. No qualification question may be asked ahead of it. Final wording is
+        <span class="pend">Pending confirmation</span>.</p>
+    </div>
+  </section>
+
+  <section id="seller">
+    <h2><span class="num">04</span>Seller flow</h2>
+    <p class="lede">Only categories 1 and 2 run the qualification conversation. Six captures, a lead
+      record, an alert to Juan, then the transfer decision. The callback number is repeated back to
+      the caller before <code>callback_confirmed</code> is set.</p>
+    <div class="diagram">
+      <div class="diagram-head"><span class="id">Diagram B</span><span class="nm">Seller qualification and transfer decision</span></div>
+      <div class="diagram-body">
+<pre class="mermaid">
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"curve":"basis","nodeSpacing":36,"rankSpacing":50,"useMaxWidth":true}}}%%
+flowchart TD
+  IN["From Q2 · New seller"]:::action
+  INB["From Q2 · Seller callback"]:::action
+  S1[/"S1 · Full name → seller_name"/]:::extract
+  S2[/"S2 · Property street address and city → property_address, property_city"/]:::extract
+  S3[/"S3 · Reason or motivation for selling → seller_reason · no legal, financial or valuation statements"/]:::extract
+  S4[/"S4 · Selling timeline → seller_timeline"/]:::extract
+  S5[/"S5 · Property condition → property_condition · build only if this field is approved"/]:::extract
+  S6[/"S6 · Callback number, repeated back to the caller → callback_number, callback_confirmed"/]:::extract
+  SC1[/"SC1 · Confirm the name and property already on file → seller_name, property_address"/]:::extract
+  F1["F1 · Create or update the seller lead record"]:::action
+  N1{{"N1 · NOTIFY Juan — new seller lead"}}:::notify
+  Q3{"Q3 · Qualifies for a live seller transfer under the approved rules?"}:::decision
+  Q4{"Q4 · Inside the approved transfer cutoff? — PENDING JUAN CONFIRMATION"}:::decision
+  X1[["X1 · TRANSFER CALL → JUAN · warm transfer"]]:::success
+  Q5{"Q5 · Did Juan answer?"}:::decision
+  Q6{"Q6 · New seller or returning seller?"}:::decision
+  N2{{"N2 · NOTIFY Juan — seller callback follow-up task"}}:::notify
+  N3{{"N3 · NOTIFY Juan — after-hours appointment or callback request"}}:::notify
+  T2(["T2 · Warm transfer connected — Juan owns the call"]):::success
+  T3(["T3 · Seller captured, Juan unavailable — callback created"]):::notifyEnd
+  T4(["T4 · After-hours seller appointment or callback logged"]):::notifyEnd
+  T5(["T5 · Seller not transfer-qualified — lead logged for Juan"]):::notifyEnd
+  T6(["T6 · Returning seller message logged for Juan"]):::notifyEnd
+  T25(["T25 · Transfer system failure — information saved, owner and Juan notified"]):::notifyEnd
+
+  IN --> S1 --> S2 --> S3 --> S4 --> S5 --> S6
+  INB --> SC1 --> S6
+  S6 --> F1 --> N1 --> Q3
+  Q3 -->|"NO"| T5
+  Q3 -->|"YES"| Q4
+  Q4 -->|"NO · after cutoff"| N3 -.-> T4
+  Q4 -->|"YES"| X1 --> Q5
+  Q5 -->|"Juan answers"| T2
+  Q5 -->|"No answer"| N2 -.-> Q6
+  Q5 -->|"Line or routing failure"| T25
+  Q6 -->|"New seller"| T3
+  Q6 -->|"Returning seller"| T6
+
+  classDef action fill:#1F6FB2,stroke:#17578C,color:#FFFFFF
+  classDef decision fill:#1C2530,stroke:#6B7787,color:#FFFFFF
+  classDef success fill:#16785A,stroke:#0F5B45,color:#FFFFFF
+  classDef notify fill:#A8730A,stroke:#835A07,color:#FFFFFF
+  classDef notifyEnd fill:#8C6208,stroke:#6B4B06,color:#FFFFFF
+  classDef stop fill:#A93529,stroke:#87281E,color:#FFFFFF
+  classDef extract fill:#63459C,stroke:#4C3479,color:#FFFFFF
+</pre>
+      </div>
+    </div>
+    <ul class="plain">
+      <li>The transfer cutoff time is <span class="pend">Pending Juan confirmation</span>. Do not
+        build a value for it.</li>
+      <li>The <code>Q3</code> qualification test uses the approved Twin Home Buyer rules; that rule
+        set is <span class="pend">Pending Juan confirmation</span>.</li>
+      <li><code>S5</code> is built only if the property-condition field is approved for this build.
+        Otherwise skip the node and leave <code>property_condition</code> null.</li>
+      <li><code>N1</code> fires on every completed seller intake, transfer or no transfer, so a
+        seller is never captured without Juan being told.</li>
+      <li>The AI makes no legal, financial or valuation statement anywhere in this branch.</li>
+    </ul>
+  </section>
+
+  <section id="realtor">
+    <h2><span class="num">05</span>Realtor and agent calls to Gen</h2>
+    <p class="lede">Four short captures, then Gen. This is the branch that changed, so it is worth
+      reading the exits carefully: both of them leave Gen as the owner.</p>
+    <div class="diagram">
+      <div class="diagram-head"><span class="id">Diagram C</span><span class="nm">Realtor / agent → GEN</span></div>
+      <div class="diagram-body">
+<pre class="mermaid">
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"curve":"basis","nodeSpacing":36,"rankSpacing":50,"useMaxWidth":true}}}%%
+flowchart TD
+  IN["From Q2 · Realtor or real estate agent"]:::action
+  R1[/"R1 · Name → caller_name"/]:::extract
+  R2[/"R2 · Callback number, repeated back → callback_number, callback_confirmed"/]:::extract
+  R3[/"R3 · Company or brokerage, only if naturally provided → caller_company"/]:::extract
+  R4[/"R4 · One-line reason for the call → call_reason_line"/]:::extract
+  F2["F2 · Create the agent contact record · call_type = realtor_agent"]:::action
+  Q8{"Q8 · Can Gen take the call right now?"}:::decision
+  X2[["X2 · TRANSFER CALL → GEN"]]:::success
+  Q9{"Q9 · Did Gen answer?"}:::decision
+  T9(["T9 · Realtor / Agent → Gen · transfer connected"]):::success
+  N4{{"N4 · NOTIFY GEN — realtor callback request with name, number, brokerage and reason"}}:::notify
+  T10(["T10 · Realtor / Agent → Gen unavailable · information saved, Gen notified, call ended politely"]):::notifyEnd
+  T25(["T25 · Transfer system failure — information saved, Gen and Juan notified"]):::notifyEnd
+
+  IN --> R1 --> R2 --> R3 --> R4 --> F2 --> Q8
+  Q8 -->|"YES"| X2 --> Q9
+  Q8 -->|"NO or after hours"| N4
+  Q9 -->|"Gen answers"| T9
+  Q9 -->|"No answer"| N4
+  Q9 -->|"Line or routing failure"| T25
+  N4 -.-> T10
+
+  classDef action fill:#1F6FB2,stroke:#17578C,color:#FFFFFF
+  classDef decision fill:#1C2530,stroke:#6B7787,color:#FFFFFF
+  classDef success fill:#16785A,stroke:#0F5B45,color:#FFFFFF
+  classDef notify fill:#A8730A,stroke:#835A07,color:#FFFFFF
+  classDef notifyEnd fill:#8C6208,stroke:#6B4B06,color:#FFFFFF
+  classDef extract fill:#63459C,stroke:#4C3479,color:#FFFFFF
+</pre>
+      </div>
+    </div>
+    <div class="callout">
+      <h4>Hard rules on the realtor branch</h4>
+      <ul class="rules">
+        <li class="do"><span class="mk">✓</span><span>Realtor and agent calls route to <strong>GEN</strong>.</span></li>
+        <li class="dont"><span class="mk">✗</span><span>Not Mariaelena. That routing is retired.</span></li>
+        <li class="dont"><span class="mk">✗</span><span>Not Sabelli — no transfer, and no normal realtor notification either.</span></li>
+        <li class="dont"><span class="mk">✗</span><span>No edge of any kind runs from this branch to Sabelli.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="nonseller">
+    <h2><span class="num">06</span>Non-seller routing</h2>
+    <p class="lede">On these calls the AI does not try to answer the question it is being asked. It
+      takes a name, a number, one line of context, and routes.</p>
+    <p style="font-family:var(--sans);font-size:17px;font-weight:500;border-left:3px solid var(--action);padding-left:14px;color:var(--text)">
+      “I'll get this to the right person. Can I get your name and the best number?”</p>
+    <div class="diagram">
+      <div class="diagram-head"><span class="id">Diagram D</span><span class="nm">Non-seller intake and destination routing</span></div>
+      <div class="diagram-body">
+<pre class="mermaid">
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"curve":"basis","nodeSpacing":28,"rankSpacing":48,"useMaxWidth":true}}}%%
+flowchart TD
+  IN["From Q2 · categories 4 to 10"]:::action
+  A3["A3 · Simple intake — I'll get this to the right person. Can I get your name and the best number?"]:::action
+  V3[/"EXTRACT · caller_name, callback_number, call_reason_line, call_type"/]:::extract
+  Q10{"Q10 · Route on call_type"}:::decision
+  Q11{"Q11 · Is Juan available for a live transfer?"}:::decision
+  X3[["X3 · TRANSFER CALL → JUAN · active contract or escrow"]]:::success
+  T11(["T11 · Active contract / escrow → Juan connected"]):::success
+  N5{{"N5 · NOTIFY Juan — active deal message, time sensitive"}}:::notify
+  T12(["T12 · Active contract / escrow message logged for Juan"]):::notifyEnd
+  Q12{"Q12 · Is Juan available for a live transfer?"}:::decision
+  X4[["X4 · TRANSFER CALL → JUAN · title, escrow or lender"]]:::success
+  T13(["T13 · Title / escrow / lender → Juan connected"]):::success
+  N6{{"N6 · NOTIFY Juan — title, escrow or lender message"}}:::notify
+  T14(["T14 · Title / escrow / lender message logged for Juan"]):::notifyEnd
+  N7{{"N7 · NOTIFY past-client follow-up owner — PENDING CONFIRMATION"}}:::notify
+  T15(["T15 · Past client message routed to the follow-up owner"]):::notifyEnd
+  N8{{"N8 · NOTIFY buyer and investor owner — PENDING CONFIRMATION"}}:::notify
+  T16(["T16 · Buyer / investor message routed to the owner"]):::notifyEnd
+  N9{{"N9 · NOTIFY vendor and subcontractor owner — PENDING CONFIRMATION"}}:::notify
+  T17(["T17 · Vendor / subcontractor message routed to the owner"]):::notifyEnd
+  N10{{"N10 · NOTIFY recruiting — PENDING CONFIRMATION of recipient"}}:::notify
+  T18(["T18 · Job applicant routed to recruiting"]):::notifyEnd
+  A5["A5 · Peninsula Plumbing intake only — never convert to a Twin Home Buyer seller lead"]:::action
+  N11{{"N11 · NOTIFY Peninsula Plumbing intake — plumbing log only"}}:::notify
+  T25D(["T25 · Transfer system failure — information saved, owner and Juan notified"]):::notifyEnd
+  T19(["T19 · Peninsula Plumbing message handled as plumbing only"]):::notifyEnd
+
+  IN --> A3 --> V3 --> Q10
+  Q10 -->|"active_contract_escrow"| Q11
+  Q11 -->|"YES"| X3 --> T11
+  Q11 -->|"NO"| N5 -.-> T12
+  Q10 -->|"title_escrow_lender"| Q12
+  Q12 -->|"YES"| X4 --> T13
+  Q12 -->|"NO"| N6 -.-> T14
+  Q10 -->|"past_client"| N7 -.-> T15
+  Q10 -->|"buyer_investor"| N8 -.-> T16
+  Q10 -->|"vendor_subcontractor"| N9 -.-> T17
+  Q10 -->|"job_applicant"| N10 -.-> T18
+  Q10 -->|"peninsula_plumbing"| A5 --> N11 -.-> T19
+  X3 -->|"line or routing failure"| T25D
+  X4 -->|"line or routing failure"| T25D
+
+  classDef action fill:#1F6FB2,stroke:#17578C,color:#FFFFFF
+  classDef decision fill:#1C2530,stroke:#6B7787,color:#FFFFFF
+  classDef success fill:#16785A,stroke:#0F5B45,color:#FFFFFF
+  classDef notify fill:#A8730A,stroke:#835A07,color:#FFFFFF
+  classDef notifyEnd fill:#8C6208,stroke:#6B4B06,color:#FFFFFF
+  classDef extract fill:#63459C,stroke:#4C3479,color:#FFFFFF
+</pre>
+      </div>
+    </div>
+    <div class="callout">
+      <h4>Peninsula Plumbing stays a plumbing call</h4>
+      <p>A plumbing caller is never converted into a Twin Home Buyer seller lead during that call.
+        <code>A5</code> takes the plumbing message, <code>N11</code> sends it to the plumbing
+        intake, and the record lands in the plumbing log — not the seller pipeline. Whether a live
+        transfer to a plumbing line is permitted is <span class="pend">Pending confirmation</span>;
+        until then plumbing calls are message-only.</p>
+    </div>
+  </section>
+
+  <section id="hardstop">
+    <h2><span class="num">07</span>Global hard stops</h2>
+    <p class="lede">Four global nodes, live at every point in the conversation. A hard stop
+      overrides the seller and non-seller flows the moment it triggers — mid-sentence, mid-capture,
+      anywhere.</p>
+    <div class="diagram">
+      <div class="diagram-head"><span class="id">Diagram E</span><span class="nm">Global interrupt layer</span></div>
+      <div class="diagram-body">
+<pre class="mermaid">
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"curve":"basis","nodeSpacing":32,"rankSpacing":48,"useMaxWidth":true}}}%%
+flowchart TD
+  ANY["Any conversation node · A2, S1 to S6, SC1, R1 to R4, A3, A5"]:::action
+  GD(("G-DNC · take me off your list, stop calling me, do not contact me")):::stop
+  GL(("G-LEGAL · attorney, lawyer, lawsuit, subpoena, legal threat, regulator, investigator, agency")):::stop
+  GM(("G-MAILER · mailer, letter, check, postcard, how did you get my address, marketing complaint")):::stop
+  GH(("G-HUMAN · asks for a human, hostile, or not understood after two attempts")):::stop
+  HS2["HS2 · DNC acknowledgment in approved wording · stop all qualification"]:::action
+  V5[/"EXTRACT · dnc_requested = true"/]:::extract
+  N13{{"N13 · NOTIFY the suppression process and compliance owner"}}:::notify
+  T21(["T21 · DNC honored · no transfer, no further qualification"]):::stop
+  HS1["HS1 · Stop qualification. Capture the approved minimum only. Do not explain the mailer, defend the company, confirm or deny anything, speculate, or improvise"]:::action
+  V4[/"EXTRACT · hard_stop_type, hard_stop_reference, legal_party_name, agency_name"/]:::extract
+  F3["F3 · Preserve the transcript and recording · transcript_id"]:::action
+  N14{{"N14 · NOTIFY and ESCALATE → JUAN plus SABELLI · review recipients only, no call transfer"}}:::notify
+  T22(["T22 · Legal / agency / mailer sensitive escalation · no transfer occurred"]):::stop
+  Q13{"Q13 · Is an approved human available right now?"}:::decision
+  X5[["X5 · TRANSFER CALL → on-call human · destination PENDING CONFIRMATION"]]:::success
+  T23(["T23 · Human escalation connected"]):::success
+  N12{{"N12 · NOTIFY the human escalation callback queue"}}:::notify
+  T24(["T24 · Human escalation callback logged"]):::notifyEnd
+
+  ANY --> GD
+  ANY --> GL
+  ANY --> GM
+  ANY --> GH
+  GD --> HS2 --> V5 --> N13 -.-> T21
+  GL --> HS1
+  GM --> HS1
+  HS1 --> V4 --> F3 --> N14 -.-> T22
+  GH --> Q13
+  Q13 -->|"YES"| X5 --> T23
+  Q13 -->|"NO"| N12 -.-> T24
+  X5 -->|"no answer or line failure"| N12
+
+  classDef action fill:#1F6FB2,stroke:#17578C,color:#FFFFFF
+  classDef decision fill:#1C2530,stroke:#6B7787,color:#FFFFFF
+  classDef success fill:#16785A,stroke:#0F5B45,color:#FFFFFF
+  classDef notify fill:#A8730A,stroke:#835A07,color:#FFFFFF
+  classDef notifyEnd fill:#8C6208,stroke:#6B4B06,color:#FFFFFF
+  classDef stop fill:#A93529,stroke:#87281E,color:#FFFFFF
+  classDef extract fill:#63459C,stroke:#4C3479,color:#FFFFFF
+</pre>
+      </div>
+    </div>
+    <div class="callout">
+      <h4>What the AI must not do on a mailer or legal call</h4>
+      <ul class="rules">
+        <li class="dont"><span class="mk">✗</span><span>Explain the mailer.</span></li>
+        <li class="dont"><span class="mk">✗</span><span>Defend the company.</span></li>
+        <li class="dont"><span class="mk">✗</span><span>Confirm an allegation.</span></li>
+        <li class="dont"><span class="mk">✗</span><span>Deny an allegation.</span></li>
+        <li class="dont"><span class="mk">✗</span><span>Speculate, or improvise an answer.</span></li>
+        <li class="do"><span class="mk">✓</span><span>Capture the approved minimum, preserve the transcript, send <code>N14</code>, end at <code>T22</code>.</span></li>
+      </ul>
+    </div>
+    <div class="callout">
+      <h4>The Sabelli rule, stated once more</h4>
+      <p><code>N14</code> is a notification. The call does not move. There is no
+        <em>Transfer to Sabelli</em> node in this build and none may be added. Sabelli appears
+        exactly once in the entire flow — as a review recipient on <code>T22</code>.</p>
+      <p>Proposed hard-stop precedence, <span class="pend">Pending Juan confirmation</span>:
+        <code>G-DNC</code> → <code>G-LEGAL</code> → <code>G-MAILER</code> → <code>G-HUMAN</code> →
+        normal flow. If a caller both requests DNC and raises a legal or mailer matter, the proposal
+        is to honour the DNC at <code>T21</code> <em>and</em> send the <code>T22</code>
+        notification, recording both endings. Do not build the combination rule until it is
+        confirmed.</p>
+    </div>
+  </section>
+
+  <section id="nodemap">
+    <h2><span class="num">08</span>Retell node map</h2>
+    <p class="lede">The same flow expressed as Retell node types, so the build can be assembled in
+      order without re-reading the diagrams.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="id">Flow node</th><th>Retell node type</th><th>Purpose</th><th>Exits</th></tr></thead>
+        <tbody>
+          <tr><td class="id">A1</td><td>Inbound call trigger</td><td>Entry on a tracking number</td><td class="mono">V1</td></tr>
+          <tr><td class="id">V1</td><td>Extract Dynamic Variables</td><td><span class="mono">source_channel, call_start_time, caller_id</span></td><td class="mono">Q1</td></tr>
+          <tr><td class="id">Q1</td><td>Logic Split</td><td>Human answered within 3 rings</td><td class="mono">T1 · A2</td></tr>
+          <tr><td class="id">A2</td><td>Conversation</td><td>Mandatory AI and recording disclosure</td><td class="mono">Q2</td></tr>
+          <tr><td class="id">Q2</td><td>Logic Split — 14 way</td><td>Intent classification</td><td class="mono">V2</td></tr>
+          <tr><td class="id">V2</td><td>Extract Dynamic Variables</td><td><span class="mono">caller_intent, intent_attempts</span></td><td class="mono">seller · realtor · non-seller · stops</td></tr>
+          <tr><td class="id">S1–S6, SC1</td><td>Conversation + Extract</td><td>Seller qualification capture</td><td class="mono">next in sequence</td></tr>
+          <tr><td class="id">F1</td><td>Function</td><td>Create or update the seller lead</td><td class="mono">N1</td></tr>
+          <tr><td class="id">R1–R4</td><td>Conversation + Extract</td><td>Realtor capture</td><td class="mono">F2</td></tr>
+          <tr><td class="id">F2</td><td>Function</td><td>Create the agent contact record</td><td class="mono">Q8</td></tr>
+          <tr><td class="id">A3</td><td>Conversation</td><td>Non-seller simple intake</td><td class="mono">V3</td></tr>
+          <tr><td class="id">V3</td><td>Extract Dynamic Variables</td><td><span class="mono">caller_name, callback_number, call_reason_line, call_type</span></td><td class="mono">Q10</td></tr>
+          <tr><td class="id">A5</td><td>Conversation</td><td>Peninsula Plumbing intake only</td><td class="mono">N11</td></tr>
+          <tr><td class="id">Q3–Q13</td><td>Logic Split</td><td>Routing and availability tests</td><td class="mono">per diagram</td></tr>
+          <tr><td class="id">X1–X5</td><td><strong>Transfer Call</strong></td><td>Move the live call</td><td class="mono">ending or failure branch</td></tr>
+          <tr><td class="id">N1–N14</td><td>Function — webhook</td><td><strong>Send notification.</strong> No audio path</td><td class="mono">ending</td></tr>
+          <tr><td class="id">G-LEGAL, G-MAILER, G-DNC, G-HUMAN</td><td><strong>Global node</strong></td><td>Interrupt from anywhere</td><td class="mono">HS1 · HS2 · Q13</td></tr>
+          <tr><td class="id">HS1, HS2</td><td>Conversation</td><td>Constrained hard-stop scripts</td><td class="mono">V4 · V5</td></tr>
+          <tr><td class="id">F3</td><td>Function</td><td>Preserve the transcript and recording</td><td class="mono">N14</td></tr>
+          <tr><td class="id">T1–T26</td><td>Ending node</td><td>Terminal disposition</td><td class="no">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="conversation">
+    <h2><span class="num">09</span>Conversation nodes</h2>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="id">ID</th><th>Name</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="id">A1</td><td>Call arrives</td><td>Stores <code>source_channel</code></td></tr>
+          <tr><td class="id">A2</td><td>Mandatory AI opening</td><td>AI disclosure and recording disclosure before any substantive conversation. Approved Twin Home Buyer opening — <span class="pend">Pending confirmation</span> of final wording</td></tr>
+          <tr><td class="id">A3</td><td>Non-seller simple intake</td><td>“I'll get this to the right person. Can I get your name and the best number?”</td></tr>
+          <tr><td class="id">A5</td><td>Peninsula Plumbing intake</td><td>Plumbing only. Never converts to a seller lead</td></tr>
+          <tr><td class="id">S1</td><td>Full name</td><td>Seller branch</td></tr>
+          <tr><td class="id">S2</td><td>Property address and city</td><td>Street address and city</td></tr>
+          <tr><td class="id">S3</td><td>Reason or motivation</td><td>Captured as said. No legal, financial or valuation statements from the AI</td></tr>
+          <tr><td class="id">S4</td><td>Selling timeline</td><td></td></tr>
+          <tr><td class="id">S5</td><td>Property condition</td><td>Build only if the field is approved — <span class="pend">Pending confirmation</span></td></tr>
+          <tr><td class="id">S6</td><td>Callback number</td><td>Number repeated back before <code>callback_confirmed</code> is set</td></tr>
+          <tr><td class="id">SC1</td><td>Returning-seller confirmation</td><td>Confirms the name and property already on file, then joins <code>S6</code></td></tr>
+          <tr><td class="id">R1–R4</td><td>Realtor capture</td><td>Name, callback number, brokerage if offered, one-line reason</td></tr>
+          <tr><td class="id">HS1</td><td>Hard-stop minimum capture</td><td>No explanation, defence, confirmation, denial or speculation</td></tr>
+          <tr><td class="id">HS2</td><td>DNC acknowledgment</td><td>Approved wording — <span class="pend">Pending confirmation</span></td></tr>
+          <tr><td class="id">F1</td><td>Create or update seller lead</td><td>Function node</td></tr>
+          <tr><td class="id">F2</td><td>Create agent contact record</td><td>Function node</td></tr>
+          <tr><td class="id">F3</td><td>Preserve transcript and recording</td><td>Function node, hard stops only</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="decision">
+    <h2><span class="num">10</span>Decision nodes</h2>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="id">ID</th><th>Question</th><th>Exits</th></tr></thead>
+        <tbody>
+          <tr><td class="id">Q1</td><td>Did a human answer within 3 rings?</td><td>YES → <span class="mono">T1</span> · NO or after hours → <span class="mono">A2</span></td></tr>
+          <tr><td class="id">Q2</td><td>Which of the 14 caller intents?</td><td>14 exits</td></tr>
+          <tr><td class="id">Q3</td><td>Qualifies for a live seller transfer?</td><td>YES → <span class="mono">Q4</span> · NO → <span class="mono">T5</span></td></tr>
+          <tr><td class="id">Q4</td><td>Inside the approved transfer cutoff? <span class="pend">Pending Juan confirmation</span></td><td>YES → <span class="mono">X1</span> · NO → <span class="mono">N3</span></td></tr>
+          <tr><td class="id">Q5</td><td>Did Juan answer the warm transfer?</td><td>Answered → <span class="mono">T2</span> · No answer → <span class="mono">N2</span> · Failure → <span class="mono">T25</span></td></tr>
+          <tr><td class="id">Q6</td><td>New seller or returning seller?</td><td><span class="mono">T3</span> · <span class="mono">T6</span></td></tr>
+          <tr><td class="id">Q7</td><td>Intent clear after 2 attempts?</td><td>YES → <span class="mono">Q2</span> · NO → <span class="mono">G-HUMAN</span></td></tr>
+          <tr><td class="id">Q8</td><td>Can Gen take the call now?</td><td>YES → <span class="mono">X2</span> · NO → <span class="mono">N4</span></td></tr>
+          <tr><td class="id">Q9</td><td>Did Gen answer?</td><td>Answered → <span class="mono">T9</span> · No answer → <span class="mono">N4</span> · Failure → <span class="mono">T25</span></td></tr>
+          <tr><td class="id">Q10</td><td>Route on <code>call_type</code></td><td>7 exits</td></tr>
+          <tr><td class="id">Q11</td><td>Juan available — active contract or escrow?</td><td>YES → <span class="mono">X3</span> · NO → <span class="mono">N5</span></td></tr>
+          <tr><td class="id">Q12</td><td>Juan available — title, escrow or lender?</td><td>YES → <span class="mono">X4</span> · NO → <span class="mono">N6</span></td></tr>
+          <tr><td class="id">Q13</td><td>Approved human available now?</td><td>YES → <span class="mono">X5</span> · NO → <span class="mono">N12</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="global">
+    <h2><span class="num">11</span>Global nodes</h2>
+    <p class="lede">Each of these is reachable from <code>A2</code>, <code>S1</code>–<code>S6</code>,
+      <code>SC1</code>, <code>R1</code>–<code>R4</code>, <code>A3</code> and <code>A5</code>.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="id">ID</th><th>Triggers</th><th>Action</th><th>Ending</th></tr></thead>
+        <tbody>
+          <tr><td class="id">G-LEGAL</td><td>Attorney, lawyer, lawsuit, subpoena, legal threat, regulator, investigator, government or consumer-protection agency</td><td>Stop qualification → <code>HS1</code></td><td class="id">T22</td></tr>
+          <tr><td class="id">G-MAILER</td><td>Mailer, letter, check, postcard, “how did you get my address”, complaint about previous marketing correspondence</td><td>Stop qualification → <code>HS1</code></td><td class="id">T22</td></tr>
+          <tr><td class="id">G-DNC</td><td>“Take me off your list”, “stop calling me”, “do not contact me”, or an equivalent request</td><td>Stop the conversation → <code>HS2</code>, set <code>dnc_requested = true</code></td><td class="id">T21</td></tr>
+          <tr><td class="id">G-HUMAN</td><td>Explicit request for a human, hostile caller, or not understood after two attempts</td><td>Stop qualification → <code>Q13</code></td><td class="id">T23 / T24</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="transfer">
+    <h2><span class="num">12</span>Transfer Call nodes</h2>
+    <p class="lede">Five nodes in the whole build move a live caller. None of them is Sabelli.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="id">ID</th><th>Destination</th><th>Trigger</th><th>Success</th><th>Failure</th></tr></thead>
+        <tbody>
+          <tr><td class="id">X1</td><td><strong>Juan</strong></td><td>Qualified seller inside the cutoff</td><td class="id yes">T2</td><td class="mono">N2 → T3 / T6, or T25</td></tr>
+          <tr><td class="id">X2</td><td><strong>GEN</strong></td><td>Realtor or real estate agent</td><td class="id yes">T9</td><td class="mono">N4 → T10, or T25</td></tr>
+          <tr><td class="id">X3</td><td><strong>Juan</strong></td><td>Active contract or escrow</td><td class="id yes">T11</td><td class="mono">N5 → T12</td></tr>
+          <tr><td class="id">X4</td><td><strong>Juan</strong></td><td>Title, escrow or lender</td><td class="id yes">T13</td><td class="mono">N6 → T14</td></tr>
+          <tr><td class="id">X5</td><td>On-call human <span class="pend">Pending confirmation</span></td><td>Human requested or hostile caller</td><td class="id yes">T23</td><td class="mono">N12 → T24</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>An <code>X6</code> transfer to a Peninsula Plumbing line is
+      <span class="pend">Pending confirmation</span>. Until a number is approved, plumbing calls take
+      a message only and end at <code>T19</code>.</p>
+  </section>
+
+  <section id="notify">
+    <h2><span class="num">13</span>Notification nodes</h2>
+    <p class="lede">Every node here sends information. Not one of them moves the call.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="id">ID</th><th>Recipient</th><th>Content</th><th>Fires when</th></tr></thead>
+        <tbody>
+          <tr><td class="id">N1</td><td>Juan</td><td>New seller lead with every captured field</td><td>Every completed seller intake</td></tr>
+          <tr><td class="id">N2</td><td>Juan</td><td>Seller callback follow-up task</td><td>Warm transfer not answered</td></tr>
+          <tr><td class="id">N3</td><td>Juan</td><td>After-hours seller appointment or callback</td><td>Outside the transfer cutoff</td></tr>
+          <tr><td class="id">N4</td><td><strong>Gen</strong></td><td>Realtor callback request — name, number, brokerage, reason</td><td>Gen unavailable or no answer</td></tr>
+          <tr><td class="id">N5</td><td>Juan</td><td>Active deal message, time sensitive</td><td>Juan unavailable</td></tr>
+          <tr><td class="id">N6</td><td>Juan</td><td>Title, escrow or lender message</td><td>Juan unavailable</td></tr>
+          <tr><td class="id">N7</td><td>Past-client follow-up owner <span class="pend">Pending</span></td><td>Past-client message</td><td>Always</td></tr>
+          <tr><td class="id">N8</td><td>Buyer / investor owner <span class="pend">Pending</span></td><td>Buyer or investor message</td><td>Always</td></tr>
+          <tr><td class="id">N9</td><td>Vendor / subcontractor owner <span class="pend">Pending</span></td><td>Vendor message</td><td>Always</td></tr>
+          <tr><td class="id">N10</td><td>Recruiting <span class="pend">Pending</span></td><td>Applicant name, number, role interest</td><td>Always</td></tr>
+          <tr><td class="id">N11</td><td>Peninsula Plumbing intake</td><td>Plumbing message — plumbing log only</td><td>Always</td></tr>
+          <tr><td class="id">N12</td><td>Human escalation queue</td><td>Hostile or human-requested callback</td><td>No human available</td></tr>
+          <tr><td class="id">N13</td><td>Suppression process and compliance owner <span class="pend">Pending</span></td><td>DNC request</td><td>On <code>G-DNC</code></td></tr>
+          <tr><td class="id">N14</td><td><strong>Juan + Sabelli</strong></td><td>Sensitive legal, agency or mailer escalation with transcript and recording</td><td>On <code>G-LEGAL</code> or <code>G-MAILER</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><code>N14</code> is the only notification Sabelli receives, and it is a review notification,
+      not a transfer.</p>
+  </section>
+
+  <section id="vars">
+    <h2><span class="num">14</span>Extract variables</h2>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="id">Variable</th><th>Captured at</th><th>Required</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="id">source_channel</td><td class="mono">V1</td><td class="yes">Yes</td><td>Tracking number the call arrived on</td></tr>
+          <tr><td class="id">call_start_time</td><td class="mono">V1</td><td class="yes">Yes</td><td>Used by the cutoff test at <code>Q4</code></td></tr>
+          <tr><td class="id">caller_id</td><td class="mono">V1</td><td class="yes">Yes</td><td>Inbound number</td></tr>
+          <tr><td class="id">human_answered</td><td class="mono">Q1</td><td class="yes">Yes</td><td>Drives <code>T1</code></td></tr>
+          <tr><td class="id">caller_intent</td><td class="mono">V2</td><td class="yes">Yes</td><td>One of the 14 categories</td></tr>
+          <tr><td class="id">intent_attempts</td><td class="mono">V2</td><td class="yes">Yes</td><td>Two failures route to <code>G-HUMAN</code></td></tr>
+          <tr><td class="id">seller_name</td><td class="mono">S1 · SC1</td><td class="yes">Sellers</td><td></td></tr>
+          <tr><td class="id">property_address</td><td class="mono">S2 · SC1</td><td class="yes">Sellers</td><td>Street address</td></tr>
+          <tr><td class="id">property_city</td><td class="mono">S2</td><td class="yes">Sellers</td><td></td></tr>
+          <tr><td class="id">seller_reason</td><td class="mono">S3</td><td class="yes">Sellers</td><td>Motivation, captured as the caller states it</td></tr>
+          <tr><td class="id">seller_timeline</td><td class="mono">S4</td><td class="yes">Sellers</td><td></td></tr>
+          <tr><td class="id">property_condition</td><td class="mono">S5</td><td class="no">Conditional</td><td>Only if the field is approved for this build</td></tr>
+          <tr><td class="id">callback_number</td><td class="mono">S6 · R2 · V3</td><td class="yes">Yes</td><td></td></tr>
+          <tr><td class="id">callback_confirmed</td><td class="mono">S6 · R2</td><td class="yes">Yes</td><td>Set true only after the number is repeated back</td></tr>
+          <tr><td class="id">caller_name</td><td class="mono">R1 · V3</td><td class="yes">Non-sellers</td><td></td></tr>
+          <tr><td class="id">caller_company</td><td class="mono">R3</td><td class="no">Optional</td><td>Brokerage, only if naturally provided</td></tr>
+          <tr><td class="id">call_reason_line</td><td class="mono">R4 · V3</td><td class="yes">Non-sellers</td><td>One line, no interpretation added</td></tr>
+          <tr><td class="id">call_type</td><td class="mono">V3</td><td class="yes">Non-sellers</td><td>Routing key at <code>Q10</code></td></tr>
+          <tr><td class="id">transfer_attempted</td><td class="mono">X1–X5</td><td class="no">System</td><td></td></tr>
+          <tr><td class="id">transfer_result</td><td class="mono">X1–X5</td><td class="no">System</td><td><code>connected</code>, <code>no_answer</code>, <code>failed</code></td></tr>
+          <tr><td class="id">dnc_requested</td><td class="mono">V5</td><td class="yes">On DNC</td><td>Set <code>true</code>, triggers suppression</td></tr>
+          <tr><td class="id">hard_stop_type</td><td class="mono">V4</td><td class="yes">On hard stop</td><td><code>legal</code>, <code>agency</code>, <code>mailer</code></td></tr>
+          <tr><td class="id">hard_stop_reference</td><td class="mono">V4</td><td class="no">If offered</td><td>Mailer, letter, check or postcard reference</td></tr>
+          <tr><td class="id">legal_party_name</td><td class="mono">V4</td><td class="yes">On legal stop</td><td>Attorney, firm or caller name</td></tr>
+          <tr><td class="id">agency_name</td><td class="mono">V4</td><td class="yes">On agency stop</td><td></td></tr>
+          <tr><td class="id">transcript_id</td><td class="mono">F3</td><td class="yes">On hard stop</td><td>Preserved transcript and recording</td></tr>
+          <tr><td class="id">hostile_flag</td><td class="mono">G-HUMAN</td><td class="no">Conditional</td><td></td></tr>
+          <tr><td class="id">plumbing_issue_summary</td><td class="mono">A5</td><td class="yes">Plumbing</td><td>Plumbing log only</td></tr>
+          <tr><td class="id">applicant_role_interest</td><td class="mono">A3</td><td class="yes">Applicants</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="endings">
+    <h2><span class="num">15</span>Ending nodes</h2>
+    <p class="lede">Twenty-four endings. Every branch in every diagram lands on one of them, and each
+      one names an owner.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="id">ID</th><th>What happened</th><th>Owner</th><th>Notification</th><th>Transfer</th><th>CRM action</th><th>Follow-up</th></tr></thead>
+        <tbody>
+          <tr><td class="id">T1</td><td>Human answered within 3 rings</td><td>Whoever answered</td><td><span class="tag none">None</span></td><td><span class="tag none">N/A — human answered</span></td><td>Logged by the team member per existing process</td><td>Owned by whoever answered</td></tr>
+          <tr><td class="id">T2</td><td>Qualified seller warm-transferred and connected</td><td>Juan</td><td><span class="tag notif">Lead summary</span></td><td><span class="tag xfer">Yes → Juan</span></td><td>Seller lead with all <code>S1</code>–<code>S6</code> fields</td><td>Juan owns from the transfer forward</td></tr>
+          <tr><td class="id">T3</td><td>Seller captured, Juan did not answer</td><td>Juan</td><td><span class="tag notif">N1 + N2</span></td><td>Attempted, not connected</td><td>Seller lead, <code>transfer_result = no_answer</code></td><td>Callback task for Juan — SLA <span class="pend">Pending</span></td></tr>
+          <tr><td class="id">T4</td><td>Seller call outside the transfer cutoff</td><td>Juan</td><td><span class="tag notif">N1 + N3</span></td><td><span class="tag none">No</span></td><td>Seller lead with after-hours flag</td><td>Approved after-hours appointment or callback process <span class="pend">Pending</span></td></tr>
+          <tr><td class="id">T5</td><td>Seller did not meet the live-transfer rules</td><td>Juan</td><td><span class="tag notif">N1</span></td><td><span class="tag none">No</span></td><td>Seller lead, <code>transfer_eligible = false</code></td><td>Juan reviews the lead</td></tr>
+          <tr><td class="id">T6</td><td>Returning seller, message taken</td><td>Juan</td><td><span class="tag notif">N1 + N2</span></td><td>Attempted or skipped</td><td>Appended to the existing lead</td><td>Juan callback</td></tr>
+          <tr><td class="id">T9</td><td><strong>Realtor / agent transferred to Gen and connected</strong></td><td><strong>Gen</strong></td><td><span class="tag notif">Contact record to Gen</span></td><td><span class="tag xfer">Yes → Gen</span></td><td>Agent contact with the stated reason</td><td>Gen owns the call</td></tr>
+          <tr><td class="id">T10</td><td>Realtor / agent — Gen unavailable</td><td><strong>Gen</strong></td><td><span class="tag notif">N4</span></td><td>No, or attempted and not connected</td><td>Agent contact saved</td><td>Gen callback — SLA <span class="pend">Pending</span></td></tr>
+          <tr><td class="id">T11</td><td>Active contract or escrow connected to Juan</td><td>Juan</td><td><span class="tag notif">Message summary</span></td><td><span class="tag xfer">Yes → Juan</span></td><td>Attached to the deal record</td><td>Juan</td></tr>
+          <tr><td class="id">T12</td><td>Active contract or escrow message taken</td><td>Juan</td><td><span class="tag notif">N5</span></td><td>Attempted, not connected</td><td>Attached to the deal record, time-sensitive flag</td><td>Juan same business day <span class="pend">Pending</span></td></tr>
+          <tr><td class="id">T13</td><td>Title, escrow or lender connected to Juan</td><td>Juan</td><td><span class="tag notif">Message summary</span></td><td><span class="tag xfer">Yes → Juan</span></td><td>Attached to the relevant file</td><td>Juan</td></tr>
+          <tr><td class="id">T14</td><td>Title, escrow or lender message taken</td><td>Juan</td><td><span class="tag notif">N6</span></td><td>Attempted, not connected</td><td>Attached to the relevant file</td><td>Juan</td></tr>
+          <tr><td class="id">T15</td><td>Past client message routed</td><td>Follow-up owner <span class="pend">Pending</span></td><td><span class="tag notif">N7</span></td><td><span class="tag none">No</span></td><td>Past-client record updated</td><td>Owner callback <span class="pend">Pending</span></td></tr>
+          <tr><td class="id">T16</td><td>Buyer or investor message routed</td><td>Buyer-investor owner <span class="pend">Pending</span></td><td><span class="tag notif">N8</span></td><td><span class="tag none">No</span></td><td>Buyer list record</td><td>Owner callback <span class="pend">Pending</span></td></tr>
+          <tr><td class="id">T17</td><td>Vendor or subcontractor message routed</td><td>Internal owner <span class="pend">Pending</span></td><td><span class="tag notif">N9</span></td><td><span class="tag none">No</span></td><td>Vendor record</td><td>Owner callback <span class="pend">Pending</span></td></tr>
+          <tr><td class="id">T18</td><td>Job applicant routed to recruiting</td><td>Recruiting <span class="pend">Pending</span></td><td><span class="tag notif">N10</span></td><td><span class="tag none">No</span></td><td>Applicant record</td><td>Recruiting process</td></tr>
+          <tr><td class="id">T19</td><td>Peninsula Plumbing call handled as plumbing</td><td>Peninsula Plumbing</td><td><span class="tag notif">N11</span></td><td>No — transfer line <span class="pend">Pending</span></td><td>Plumbing log only. <strong>Never</strong> the Twin Home Buyer seller pipeline</td><td>Plumbing process</td></tr>
+          <tr><td class="id">T20</td><td>Spam or wrong number</td><td class="no">None</td><td><span class="tag none">None</span></td><td><span class="tag none">No</span></td><td>Disposition <code>spam_wrong_number</code></td><td>None. Optionally add to the screening list</td></tr>
+          <tr><td class="id">T21</td><td><strong>DNC honored</strong></td><td>Compliance owner <span class="pend">Pending</span></td><td><span class="tag hard">N13</span></td><td><span class="tag hard">No</span></td><td><code>dnc_requested = true</code>, suppress across all marketing lists</td><td>Confirm suppression applied inside the approved window <span class="pend">Pending</span></td></tr>
+          <tr><td class="id">T22</td><td><strong>Legal, agency or mailer sensitive escalation</strong></td><td>Juan</td><td><span class="tag hard">N14 → Juan + Sabelli, with transcript</span></td><td><span class="tag hard">No — and no transfer to Sabelli exists</span></td><td>Restricted sensitive-matter record</td><td>Juan and Sabelli review. Caller told someone will follow up — wording <span class="pend">Pending</span></td></tr>
+          <tr><td class="id">T23</td><td>Human escalation connected</td><td>On-call human <span class="pend">Pending</span></td><td><span class="tag notif">Call summary</span></td><td><span class="tag xfer">Yes → on-call human</span></td><td>Call note</td><td>The human owns the call</td></tr>
+          <tr><td class="id">T24</td><td>Human escalation callback logged — includes unclear callers after two attempts</td><td>On-call human <span class="pend">Pending</span></td><td><span class="tag notif">N12</span></td><td><span class="tag none">No</span></td><td>Call note with the partial capture</td><td>Human callback — SLA <span class="pend">Pending</span></td></tr>
+          <tr><td class="id">T25</td><td>Transfer failed technically — line or routing error</td><td>Intended destination and Juan</td><td><span class="tag notif">To the intended owner and Juan</span></td><td>Attempted, failed</td><td>Full capture saved, <code>transfer_result = failed</code></td><td>Callback by the intended owner</td></tr>
+          <tr><td class="id">T26</td><td>Caller disconnected mid-flow</td><td>Depends on what was captured</td><td><span class="tag notif">Only if seller, realtor or hard-stop content was captured</span></td><td><span class="tag none">No</span></td><td>Partial capture saved, <code>call_incomplete = true</code></td><td>Callback if a confirmed number exists</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>How <code>T26</code> is reached.</strong> <code>T26</code> has no incoming edge in the
+      diagrams, by design. It is wired to Retell's call-ended event on every conversation node, so a
+      dropped call still lands on a named disposition instead of vanishing.</p>
+    <p><strong>Retired:</strong> <code>T7</code> and <code>T8</code>, the v1.0 realtor-to-Mariaelena
+      endings. Do not rebuild them.</p>
+  </section>
+
+  <section id="pending">
+    <h2><span class="num">16</span>Pending confirmation</h2>
+    <p class="lede">Nothing on this list may be built as a guess. Each item needs Juan's or Cherry's
+      sign-off first, and each one names what it blocks.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="id">#</th><th>Item</th><th>Needed from</th><th>Blocks</th></tr></thead>
+        <tbody>
+          <tr><td class="id">1</td><td><strong>Seller transfer cutoff time</strong> and the after-hours boundary</td><td>Juan</td><td class="mono">Q4 · T4</td></tr>
+          <tr><td class="id">2</td><td><strong>Seller live-transfer qualification rules</strong> — what makes a seller transfer-worthy</td><td>Juan</td><td class="mono">Q3 · T5</td></tr>
+          <tr><td class="id">3</td><td>Whether <strong>property condition</strong> is approved for this build</td><td>Juan</td><td class="mono">S5</td></tr>
+          <tr><td class="id">4</td><td>Approved <strong>AI opening wording</strong></td><td>Juan / Cherry</td><td class="mono">A2</td></tr>
+          <tr><td class="id">5</td><td>Gen's <strong>transfer number and availability hours</strong></td><td>Juan / Gen</td><td class="mono">X2 · Q8</td></tr>
+          <tr><td class="id">6</td><td><strong>Past-client</strong> follow-up owner</td><td>Juan</td><td class="mono">N7 · T15</td></tr>
+          <tr><td class="id">7</td><td><strong>Buyer / investor</strong> owner</td><td>Juan</td><td class="mono">N8 · T16</td></tr>
+          <tr><td class="id">8</td><td><strong>Vendor / subcontractor</strong> owner</td><td>Juan</td><td class="mono">N9 · T17</td></tr>
+          <tr><td class="id">9</td><td><strong>Recruiting</strong> notification recipient</td><td>Juan / Cherry</td><td class="mono">N10 · T18</td></tr>
+          <tr><td class="id">10</td><td>Whether Peninsula Plumbing calls may be <strong>transferred</strong> to a plumbing line, or stay message-only</td><td>Juan</td><td class="mono">X6 · T19</td></tr>
+          <tr><td class="id">11</td><td><strong>On-call human</strong> destination and hours for escalation</td><td>Juan</td><td class="mono">X5 · Q13 · T23</td></tr>
+          <tr><td class="id">12</td><td><strong>DNC suppression</strong> administrator and confirmation window</td><td>Juan / Cherry</td><td class="mono">N13 · T21</td></tr>
+          <tr><td class="id">13</td><td>Approved <strong>caller-facing wording</strong> for the hard-stop scripts and the <code>T22</code> close</td><td>Juan / Cherry</td><td class="mono">HS1 · HS2 · T22</td></tr>
+          <tr><td class="id">14</td><td><strong>Hard-stop precedence</strong> and the DNC-plus-legal combination rule</td><td>Juan</td><td class="mono">Global layer</td></tr>
+          <tr><td class="id">15</td><td><strong>Callback SLAs</strong></td><td>Juan</td><td class="mono">T3 · T10 · T12 · T24</td></tr>
+          <tr><td class="id">16</td><td><strong>Notification channel</strong> per recipient — SMS, email or CRM task</td><td>Juan</td><td class="mono">All N nodes</td></tr>
+          <tr><td class="id">17</td><td>Name of the <strong>[CURRENT BUILDER]</strong> for the title block</td><td>Juan</td><td class="mono">Document header</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  </main>
+
+  <div class="footer">
+    Twin Home Buyer — Inbound Call Flowchart v2.0 · Supersedes v1.0 ·
+    Build / Retell implementation: [CURRENT BUILDER] · Approve: Juan ·
+    Gen is a transfer destination. Sabelli is a notification and review recipient.
+  </div>
+</div>
