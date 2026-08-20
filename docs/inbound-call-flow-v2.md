@@ -51,7 +51,7 @@ Sabelli is only ever reached by a dashed arrow.
 ### 2.1 Diagram A — Call arrival and intent routing
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent","primaryColor":"#1F6FB2","primaryTextColor":"#FFFFFF"},"flowchart":{"curve":"basis","nodeSpacing":38,"rankSpacing":52,"useMaxWidth":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent","primaryColor":"#1F6FB2","primaryTextColor":"#FFFFFF"},"flowchart":{"htmlLabels":false,"curve":"basis","nodeSpacing":38,"rankSpacing":52,"useMaxWidth":true}}}%%
 flowchart TD
   A1["A1 · Call arrives on a Twin Home Buyer tracking number"]:::action
   V1[/"EXTRACT · source_channel, call_start_time, caller_id"/]:::extract
@@ -60,9 +60,9 @@ flowchart TD
   A2["A2 · Mandatory AI opening — discloses AI assistant and call recording before any substantive conversation"]:::action
   Q2{"Q2 · Determine caller intent"}:::decision
   V2[/"EXTRACT · caller_intent, intent_attempts"/]:::extract
-  SEL["Seller flow — Diagram B"]:::action
+  SEL["Seller flow — Diagrams B1 and B2"]:::action
   GEN["Realtor flow to Gen — Diagram C"]:::action
-  NON["Non-seller intake — Diagram D"]:::action
+  NON["Non-seller intake — Diagrams D1 and D2 · 4 active contract or escrow · 5 title, escrow or lender · 6 past client · 7 buyer or investor · 8 vendor or subcontractor · 9 job applicant · 10 Peninsula Plumbing"]:::action
   Q7{"Q7 · Intent clear after 2 attempts?"}:::decision
   T20(["T20 · Spam or wrong number — polite end"]):::stop
   GH(("G-HUMAN")):::stop
@@ -73,19 +73,12 @@ flowchart TD
   Q1 -->|"YES"| T1
   Q1 -->|"NO or after hours"| A2
   A2 --> Q2 --> V2
-  V2 -->|"1 New seller"| SEL
-  V2 -->|"2 Seller callback"| SEL
-  V2 -->|"3 Realtor or real estate agent"| GEN
-  V2 -->|"4 Active contract or escrow"| NON
-  V2 -->|"5 Title, escrow or lender"| NON
-  V2 -->|"6 Past client"| NON
-  V2 -->|"7 Buyer or investor"| NON
-  V2 -->|"8 Vendor or subcontractor"| NON
-  V2 -->|"9 Job applicant"| NON
-  V2 -->|"10 Peninsula Plumbing caller"| NON
-  V2 -->|"11 Spam or wrong number"| T20
-  V2 -->|"12 Unclear caller"| Q7
-  V2 -->|"13 Legal, agency or mailer"| GLM
+  V2 -->|"1 new seller · 2 seller callback"| SEL
+  V2 -->|"3 realtor or agent"| GEN
+  V2 -->|"4 to 10 · non-seller"| NON
+  V2 -->|"11 spam or wrong number"| T20
+  V2 -->|"12 unclear caller"| Q7
+  V2 -->|"13 legal, agency or mailer"| GLM
   V2 -->|"14 DNC request"| GD
   Q7 -->|"YES · reclassify"| Q2
   Q7 -->|"NO · two failed attempts"| GH
@@ -98,12 +91,14 @@ flowchart TD
   classDef extract fill:#63459C,stroke:#4C3479,color:#FFFFFF
 ```
 
-### 2.2 Diagram B — Seller flow
+### 2.2 Diagrams B1 and B2 — Seller flow
 
 Only seller calls (`caller_intent = new_seller` or `seller_callback`) run the qualification conversation.
 
+**Diagram B1 — capture**
+
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"curve":"basis","nodeSpacing":38,"rankSpacing":52,"useMaxWidth":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"htmlLabels":false,"curve":"basis","nodeSpacing":36,"rankSpacing":50,"useMaxWidth":true}}}%%
 flowchart TD
   IN["From Q2 · New seller"]:::action
   INB["From Q2 · Seller callback"]:::action
@@ -111,13 +106,34 @@ flowchart TD
   S2[/"S2 · Property street address and city → property_address, property_city"/]:::extract
   S3[/"S3 · Reason or motivation for selling → seller_reason · no legal, financial or valuation statements"/]:::extract
   S4[/"S4 · Selling timeline → seller_timeline"/]:::extract
-  S5[/"S5 · Property condition → property_condition · include only if approved for this build"/]:::extract
+  S5[/"S5 · Property condition → property_condition · build only if this field is approved"/]:::extract
   S6[/"S6 · Callback number, repeated back to the caller → callback_number, callback_confirmed"/]:::extract
-  SC1[/"SC1 · Confirm name and property already on file → seller_name, property_address"/]:::extract
+  SC1[/"SC1 · Confirm the name and property already on file → seller_name, property_address"/]:::extract
   F1["F1 · Create or update the seller lead record"]:::action
   N1{{"N1 · NOTIFY Juan — new seller lead"}}:::notify
+  GO["Continue to Diagram B2 · transfer decision"]:::decision
+
+  IN --> S1 --> S2 --> S3 --> S4 --> S5 --> S6
+  INB --> SC1 --> S6
+  S6 --> F1 --> N1 --> GO
+
+  classDef action fill:#1F6FB2,stroke:#17578C,color:#FFFFFF
+  classDef decision fill:#1C2530,stroke:#6B7787,color:#FFFFFF
+  classDef success fill:#16785A,stroke:#0F5B45,color:#FFFFFF
+  classDef notify fill:#A8730A,stroke:#835A07,color:#FFFFFF
+  classDef notifyEnd fill:#8C6208,stroke:#6B4B06,color:#FFFFFF
+  classDef stop fill:#A93529,stroke:#87281E,color:#FFFFFF
+  classDef extract fill:#63459C,stroke:#4C3479,color:#FFFFFF
+```
+
+**Diagram B2 — transfer decision**
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"htmlLabels":false,"curve":"basis","nodeSpacing":36,"rankSpacing":50,"useMaxWidth":true}}}%%
+flowchart TD
+  IN2["From Diagram B1 · capture complete, N1 sent to Juan"]:::action
   Q3{"Q3 · Qualifies for a live seller transfer under the approved rules?"}:::decision
-  Q4{"Q4 · Call is inside the approved transfer cutoff? — PENDING JUAN CONFIRMATION"}:::decision
+  Q4{"Q4 · Inside the approved transfer cutoff? — PENDING JUAN CONFIRMATION"}:::decision
   X1[["X1 · TRANSFER CALL → JUAN · warm transfer"]]:::success
   Q5{"Q5 · Did Juan answer?"}:::decision
   Q6{"Q6 · New seller or returning seller?"}:::decision
@@ -130,9 +146,7 @@ flowchart TD
   T6(["T6 · Returning seller message logged for Juan"]):::notifyEnd
   T25(["T25 · Transfer system failure — information saved, owner and Juan notified"]):::notifyEnd
 
-  IN --> S1 --> S2 --> S3 --> S4 --> S5 --> S6
-  INB --> SC1 --> S6
-  S6 --> F1 --> N1 --> Q3
+  IN2 --> Q3
   Q3 -->|"NO"| T5
   Q3 -->|"YES"| Q4
   Q4 -->|"NO · after cutoff"| N3 -.-> T4
@@ -152,7 +166,7 @@ flowchart TD
   classDef extract fill:#63459C,stroke:#4C3479,color:#FFFFFF
 ```
 
-**Notes on Diagram B**
+**Notes on Diagrams B1 and B2**
 
 - The transfer cutoff time is **PENDING JUAN CONFIRMATION**. Do not build a cutoff value until it is supplied.
 - The live-transfer qualification test at `Q3` uses the approved Twin Home Buyer rules; the rule set itself is **PENDING JUAN CONFIRMATION**.
@@ -162,7 +176,7 @@ flowchart TD
 ### 2.3 Diagram C — Realtor / Agent → GEN (changed routing)
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"curve":"basis","nodeSpacing":38,"rankSpacing":52,"useMaxWidth":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"htmlLabels":false,"curve":"basis","nodeSpacing":38,"rankSpacing":52,"useMaxWidth":true}}}%%
 flowchart TD
   IN["From Q2 · Realtor or real estate agent"]:::action
   R1[/"R1 · Name → caller_name"/]:::extract
@@ -200,44 +214,33 @@ flowchart TD
 - No normal realtor notification goes to Sabelli.
 - There is no edge of any kind from this branch to Sabelli.
 
-### 2.4 Diagram D — Non-seller intake and routing
+### 2.4 Diagrams D1 and D2 — Non-seller intake and routing
 
 The AI does not attempt to answer substantive questions on these calls. It takes a message and routes.
 
 Intake script: *"I'll get this to the right person. Can I get your name and the best number?"*
 
+**Diagram D1 — intake and the lanes Juan can take live**
+
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"curve":"basis","nodeSpacing":30,"rankSpacing":50,"useMaxWidth":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"htmlLabels":false,"curve":"basis","nodeSpacing":32,"rankSpacing":48,"useMaxWidth":true}}}%%
 flowchart TD
   IN["From Q2 · categories 4 to 10"]:::action
   A3["A3 · Simple intake — I'll get this to the right person. Can I get your name and the best number?"]:::action
   V3[/"EXTRACT · caller_name, callback_number, call_reason_line, call_type"/]:::extract
   Q10{"Q10 · Route on call_type"}:::decision
-
   Q11{"Q11 · Is Juan available for a live transfer?"}:::decision
   X3[["X3 · TRANSFER CALL → JUAN · active contract or escrow"]]:::success
   T11(["T11 · Active contract / escrow → Juan connected"]):::success
   N5{{"N5 · NOTIFY Juan — active deal message, time sensitive"}}:::notify
   T12(["T12 · Active contract / escrow message logged for Juan"]):::notifyEnd
-
   Q12{"Q12 · Is Juan available for a live transfer?"}:::decision
   X4[["X4 · TRANSFER CALL → JUAN · title, escrow or lender"]]:::success
   T13(["T13 · Title / escrow / lender → Juan connected"]):::success
   N6{{"N6 · NOTIFY Juan — title, escrow or lender message"}}:::notify
   T14(["T14 · Title / escrow / lender message logged for Juan"]):::notifyEnd
-
-  N7{{"N7 · NOTIFY past-client follow-up owner — PENDING CONFIRMATION"}}:::notify
-  T15(["T15 · Past client message routed to follow-up owner"]):::notifyEnd
-  N8{{"N8 · NOTIFY buyer and investor owner — PENDING CONFIRMATION"}}:::notify
-  T16(["T16 · Buyer / investor message routed to owner"]):::notifyEnd
-  N9{{"N9 · NOTIFY vendor and subcontractor owner — PENDING CONFIRMATION"}}:::notify
-  T17(["T17 · Vendor / subcontractor message routed to owner"]):::notifyEnd
-  N10{{"N10 · NOTIFY recruiting — PENDING CONFIRMATION of recipient"}}:::notify
-  T18(["T18 · Job applicant routed to recruiting"]):::notifyEnd
-  A5["A5 · Peninsula Plumbing intake only — never convert to a Twin Home Buyer seller lead"]:::action
-  N11{{"N11 · NOTIFY Peninsula Plumbing intake — plumbing log only"}}:::notify
   T25D(["T25 · Transfer system failure — information saved, owner and Juan notified"]):::notifyEnd
-  T19(["T19 · Peninsula Plumbing message handled as plumbing only"]):::notifyEnd
+  MSG["Message-only call types — continue to Diagram D2"]:::decision
 
   IN --> A3 --> V3 --> Q10
   Q10 -->|"active_contract_escrow"| Q11
@@ -246,13 +249,41 @@ flowchart TD
   Q10 -->|"title_escrow_lender"| Q12
   Q12 -->|"YES"| X4 --> T13
   Q12 -->|"NO"| N6 -.-> T14
-  Q10 -->|"past_client"| N7 -.-> T15
-  Q10 -->|"buyer_investor"| N8 -.-> T16
-  Q10 -->|"vendor_subcontractor"| N9 -.-> T17
-  Q10 -->|"job_applicant"| N10 -.-> T18
-  Q10 -->|"peninsula_plumbing"| A5 --> N11 -.-> T19
   X3 -->|"line or routing failure"| T25D
   X4 -->|"line or routing failure"| T25D
+  Q10 -->|"past client · buyer or investor · vendor · applicant · plumbing"| MSG
+
+  classDef action fill:#1F6FB2,stroke:#17578C,color:#FFFFFF
+  classDef decision fill:#1C2530,stroke:#6B7787,color:#FFFFFF
+  classDef success fill:#16785A,stroke:#0F5B45,color:#FFFFFF
+  classDef notify fill:#A8730A,stroke:#835A07,color:#FFFFFF
+  classDef notifyEnd fill:#8C6208,stroke:#6B4B06,color:#FFFFFF
+  classDef extract fill:#63459C,stroke:#4C3479,color:#FFFFFF
+```
+
+**Diagram D2 — message-only lanes**
+
+```mermaid
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"htmlLabels":false,"curve":"basis","nodeSpacing":32,"rankSpacing":48,"useMaxWidth":true}}}%%
+flowchart TD
+  IN2["From Q10 · message-only call types · no live transfer"]:::decision
+  N7{{"N7 · NOTIFY past-client follow-up owner — PENDING CONFIRMATION"}}:::notify
+  T15(["T15 · Past client message routed to the follow-up owner"]):::notifyEnd
+  N8{{"N8 · NOTIFY buyer and investor owner — PENDING CONFIRMATION"}}:::notify
+  T16(["T16 · Buyer / investor message routed to the owner"]):::notifyEnd
+  N9{{"N9 · NOTIFY vendor and subcontractor owner — PENDING CONFIRMATION"}}:::notify
+  T17(["T17 · Vendor / subcontractor message routed to the owner"]):::notifyEnd
+  N10{{"N10 · NOTIFY recruiting — PENDING CONFIRMATION of recipient"}}:::notify
+  T18(["T18 · Job applicant routed to recruiting"]):::notifyEnd
+  A5["A5 · Peninsula Plumbing intake only — never convert to a Twin Home Buyer seller lead"]:::action
+  N11{{"N11 · NOTIFY Peninsula Plumbing intake — plumbing log only"}}:::notify
+  T19(["T19 · Peninsula Plumbing message handled as plumbing only"]):::notifyEnd
+
+  IN2 -->|"past_client"| N7 -.-> T15
+  IN2 -->|"buyer_investor"| N8 -.-> T16
+  IN2 -->|"vendor_subcontractor"| N9 -.-> T17
+  IN2 -->|"job_applicant"| N10 -.-> T18
+  IN2 -->|"peninsula_plumbing"| A5 --> N11 -.-> T19
 
   classDef action fill:#1F6FB2,stroke:#17578C,color:#FFFFFF
   classDef decision fill:#1C2530,stroke:#6B7787,color:#FFFFFF
@@ -267,7 +298,7 @@ flowchart TD
 These four global nodes can interrupt the conversation from **any** node. A hard stop overrides the seller and non-seller flows.
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"curve":"basis","nodeSpacing":34,"rankSpacing":50,"useMaxWidth":true}}}%%
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Archivo, ui-sans-serif, sans-serif","fontSize":"13px","lineColor":"#7E8896","textColor":"#7E8896","edgeLabelBackground":"transparent"},"flowchart":{"htmlLabels":false,"curve":"basis","nodeSpacing":34,"rankSpacing":50,"useMaxWidth":true}}}%%
 flowchart TD
   ANY["Any conversation node · A2, S1 to S6, SC1, R1 to R4, A3, A5"]:::action
   GD(("G-DNC · take me off your list, stop calling me, do not contact me")):::stop
