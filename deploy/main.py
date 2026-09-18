@@ -51,14 +51,68 @@ ANSWERED_THREADS = {}
 # unset {{current_hour}} silently reads as nothing at all.
 OFFICE_TIMEZONE = "America/Los_Angeles"
 
+def _hour_setting(name, default):
+    """A shift boundary, overridable without touching this file.
+
+    Testing the after-hours path in daylight means making the clock say
+    closed. Doing that by editing the constants meant the real hours
+    came back with the next paste of this file, three times, and each
+    time the test quietly passed through the daytime path instead. A
+    setting cannot be overwritten by a deploy.
+    """
+
+    raw = os.environ.get(name, "").strip()
+
+    if not raw:
+        return default
+
+    try:
+        hour = int(raw)
+    except ValueError:
+        logging.error("%s_NOT_A_NUMBER value=%r", name, raw)
+        return default
+
+    if not 0 <= hour <= 24:
+        logging.error("%s_OUT_OF_RANGE value=%r", name, raw)
+        return default
+
+    logging.info("%s_OVERRIDDEN value=%d", name, hour)
+
+    return hour
+
+
 # Shift start and end, as whole hours on a 24-hour clock. 8 through 16
 # inclusive is 8:00 AM up to 4:59 PM; 17 is closed.
-OFFICE_OPENS_HOUR = 8
-OFFICE_CLOSES_HOUR = 17
+OFFICE_OPENS_HOUR = _hour_setting("OFFICE_OPENS_HOUR", 8)
+OFFICE_CLOSES_HOUR = _hour_setting("OFFICE_CLOSES_HOUR", 17)
 
 # Days nobody is on shift at any hour. The answering service has
 # Sunday outright, so the hours above never apply to it.
-OFFICE_CLOSED_DAYS = {"Sunday"}
+def _closed_days():
+    """The days the office is shut whatever the hour.
+
+    A blank setting falls back to Sunday rather than meaning "no closed
+    days". Someone clearing a variable by accident should not quietly
+    hand us Sunday back; "none" says it on purpose.
+    """
+
+    raw = os.environ.get("OFFICE_CLOSED_DAYS", "").strip()
+
+    if not raw:
+        return {"Sunday"}
+
+    if raw.lower() == "none":
+        logging.info("OFFICE_CLOSED_DAYS_CLEARED")
+        return set()
+
+    return {
+        day.strip()
+        for day in raw.split(",")
+        if day.strip()
+    } or {"Sunday"}
+
+
+OFFICE_CLOSED_DAYS = _closed_days()
 
 
 # The agent's welcome message is the field {{greeting}}, so what the
