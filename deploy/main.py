@@ -75,6 +75,21 @@ OPEN_GREETING = (
 CLOSED_GREETING = "One moment, connecting you."
 
 
+# The agent that answers out-of-hours calls, if one is configured.
+#
+# The main agent cannot do this job. After a static welcome message it
+# has nothing to respond to, so it takes no turn at all until silence
+# forces one - on a real test it sat for fifteen seconds and then
+# started the intake, never reaching the handoff rule. A dedicated
+# agent whose first generated turn IS the transfer has no such gap.
+#
+# Left unset, nothing changes and the main agent keeps every call.
+AFTER_HOURS_AGENT_ID = os.environ.get(
+    "AFTER_HOURS_AGENT_ID",
+    "",
+).strip()
+
+
 def office_clock(now=None):
     """The time the voice agent should believe, in the office's timezone.
 
@@ -2327,7 +2342,24 @@ def hello_http(request):
             inbound.get("from_number", ""),
         )
 
+        response = {
+            "dynamic_variables": clock,
+        }
+
         if clock["office_open"] == "no":
+
+            if AFTER_HOURS_AGENT_ID:
+
+                response["override_agent_id"] = AFTER_HOURS_AGENT_ID
+
+            else:
+
+                # Worth saying out loud: without it the main agent
+                # takes the call and the seller gets an intake nobody
+                # is awake to act on.
+                logging.warning(
+                    "AFTER_HOURS_AGENT_ID_NOT_SET"
+                )
 
             send_after_hours_notice(
                 clock,
@@ -2336,9 +2368,7 @@ def hello_http(request):
 
         return (
             json.dumps({
-                "call_inbound": {
-                    "dynamic_variables": clock,
-                },
+                "call_inbound": response,
             }),
             200,
             {
