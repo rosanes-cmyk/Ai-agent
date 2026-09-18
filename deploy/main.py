@@ -61,6 +61,20 @@ OFFICE_CLOSES_HOUR = 17
 OFFICE_CLOSED_DAYS = {"Sunday"}
 
 
+# The agent's welcome message is the field {{greeting}}, so what the
+# caller hears first is decided here rather than in the prompt. Out of
+# hours the agent is only a doorway to the answering service, and a
+# caller who has to sit through an intake greeting before being handed
+# to a person has been made to wait for nothing.
+OPEN_GREETING = (
+    "Thanks for calling Twin Home Buyer. You're speaking with our "
+    "Voice AI Agent, and this call may be recorded. "
+    "How can I help you today?"
+)
+
+CLOSED_GREETING = "One moment, connecting you."
+
+
 def office_clock(now=None):
     """The time the voice agent should believe, in the office's timezone.
 
@@ -89,6 +103,7 @@ def office_clock(now=None):
         "current_day": day,
         "current_time": now.strftime("%-I:%M %p"),
         "office_open": "yes" if is_open else "no",
+        "greeting": OPEN_GREETING if is_open else CLOSED_GREETING,
     }
 
 
@@ -1449,6 +1464,101 @@ def send_claimed_notification(
 
 
 # =========================================================
+# TELL THE TEAM A CALL WENT TO THE ANSWERING SERVICE
+# =========================================================
+
+def send_after_hours_notice(clock, from_number):
+    """Post the card for a call the agent is about to hand to SAS.
+
+    Posted at the moment the call arrives rather than after the
+    transfer, because this is the only point at which we are certain
+    the call is an out-of-hours one: the transfer leg carries nothing
+    that tells it apart from a Spanish handover or a claim.
+
+    It says "handing to" rather than "handed to" for that reason. If
+    the transfer then fails, the agent's own fallback takes the
+    seller's details and the usual callback card follows, so the team
+    sees the truth either way.
+    """
+
+    webhook_url = get_chat_webhook(OTHER_LEADS_SPACE)
+
+    if not webhook_url:
+
+        logging.error(
+            "AFTER_HOURS_NOTICE_NO_WEBHOOK space=%s",
+            OTHER_LEADS_SPACE,
+        )
+
+        return False
+
+
+    caller = str(from_number or "").strip()
+
+    lines = [
+        "\U0001F319 *AFTER HOURS \u2014 HANDING TO THE ANSWERING SERVICE*",
+        "",
+        "A seller called outside the 8-5 shift.",
+        "The Voice AI is passing them to a live answering service now.",
+        "",
+    ]
+
+    if caller:
+        lines.append("\U0001F4DE *Caller:* " + caller)
+
+    lines.append(
+        "\U0001F551 *Time:* "
+        + clock.get("current_time", "")
+        + " on "
+        + clock.get("current_day", "")
+    )
+
+    lines.append("")
+    lines.append(
+        "No action needed now \u2014 the message reaches you in the morning."
+    )
+
+    request = urllib.request.Request(
+        webhook_url,
+        data=json.dumps({
+            "text": "\n".join(lines),
+        }).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+        },
+    )
+
+    try:
+
+        with urllib.request.urlopen(
+            request,
+            timeout=10,
+        ) as response:
+
+            response.read()
+
+            logging.info(
+                "AFTER_HOURS_NOTICE_SENT caller=%s time=%s",
+                caller,
+                clock.get("current_time", ""),
+            )
+
+            return True
+
+    except Exception as error:
+
+        # A failed card must never stop the call being answered.
+        logging.exception(
+            "AFTER_HOURS_NOTICE_FAILED caller=%s error=%s",
+            caller,
+            error,
+        )
+
+        return False
+
+
+# =========================================================
 # REPLY INSIDE A CHAT THREAD
 # =========================================================
 
@@ -2204,12 +2314,25 @@ def hello_http(request):
 
         clock = office_clock()
 
+        inbound = payload.get("call_inbound")
+
+        if not isinstance(inbound, dict):
+            inbound = {}
+
         logging.info(
-            "CALL_INBOUND_CLOCK day=%s hour=%s open=%s",
+            "CALL_INBOUND_CLOCK day=%s hour=%s open=%s from=%s",
             clock["current_day"],
             clock["current_hour"],
             clock["office_open"],
+            inbound.get("from_number", ""),
         )
+
+        if clock["office_open"] == "no":
+
+            send_after_hours_notice(
+                clock,
+                inbound.get("from_number", ""),
+            )
 
         return (
             json.dumps({
