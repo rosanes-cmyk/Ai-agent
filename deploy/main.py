@@ -56,6 +56,10 @@ OFFICE_TIMEZONE = "America/Los_Angeles"
 OFFICE_OPENS_HOUR = 8
 OFFICE_CLOSES_HOUR = 17
 
+# Days nobody is on shift at any hour. The answering service has
+# Sunday outright, so the hours above never apply to it.
+OFFICE_CLOSED_DAYS = {"Sunday"}
+
 
 def office_clock(now=None):
     """The time the voice agent should believe, in the office's timezone.
@@ -73,12 +77,16 @@ def office_clock(now=None):
         )
 
     hour = now.hour
+    day = now.strftime("%A")
 
-    is_open = OFFICE_OPENS_HOUR <= hour < OFFICE_CLOSES_HOUR
+    is_open = (
+        day not in OFFICE_CLOSED_DAYS
+        and OFFICE_OPENS_HOUR <= hour < OFFICE_CLOSES_HOUR
+    )
 
     return {
         "current_hour": str(hour),
-        "current_day": now.strftime("%A"),
+        "current_day": day,
         "current_time": now.strftime("%-I:%M %p"),
         "office_open": "yes" if is_open else "no",
     }
