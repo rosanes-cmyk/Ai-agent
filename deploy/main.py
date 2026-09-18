@@ -144,6 +144,45 @@ AFTER_HOURS_AGENT_ID = os.environ.get(
 ).strip()
 
 
+def _log_clock_settings():
+    """Say what the clock actually resolved to, once, at startup.
+
+    Three test calls went down the wrong path because a setting had not
+    reached the running revision, and each time the only clue was a
+    missing log line - absence is a terrible thing to have to notice.
+    This prints the values in force and, for each one, whether it came
+    from the environment or from the default, so a setting that did not
+    arrive says so rather than staying quiet.
+    """
+
+    def source(name):
+        raw = os.environ.get(name)
+        if raw is None:
+            return "default (variable not set)"
+        if not raw.strip():
+            return "default (variable set but empty)"
+        return "env=" + repr(raw)
+
+    logging.info(
+        "CLOCK_SETTINGS timezone=%s opens=%d [%s] closes=%d [%s] "
+        "closed_days=%s [%s] after_hours_agent=%s [%s]",
+        OFFICE_TIMEZONE,
+        OFFICE_OPENS_HOUR,
+        source("OFFICE_OPENS_HOUR"),
+        OFFICE_CLOSES_HOUR,
+        source("OFFICE_CLOSES_HOUR"),
+        sorted(OFFICE_CLOSED_DAYS) or "none",
+        source("OFFICE_CLOSED_DAYS"),
+        AFTER_HOURS_AGENT_ID or "NOT SET",
+        source("AFTER_HOURS_AGENT_ID"),
+    )
+
+    logging.info(
+        "CLOCK_SETTINGS_NOW %s",
+        json.dumps(office_clock(), ensure_ascii=False),
+    )
+
+
 def office_clock(now=None):
     """The time the voice agent should believe, in the office's timezone.
 
@@ -3620,3 +3659,7 @@ def hello_http(request):
         "OK",
         200,
     )
+
+
+# Last, because it reads office_clock and everything it depends on.
+_log_clock_settings()
