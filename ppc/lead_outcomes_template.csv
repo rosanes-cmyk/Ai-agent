@@ -1,0 +1,2 @@
+lead_date,lead_id,campaign,ad_group,keyword,search_term,city,gclid,qualified_lead,appointment,offer,contract,closed_deal,profit,notes
+2026-09-15,EXAMPLE-1,THB | Search | Sell House Fast | East Bay,Sell My House Fast,sell my house fast,sell my house fast oakland,Oakland,,yes,yes,yes,no,no,,EXAMPLE row: ignored by the exporter. One row per lead; lead_date = the day the lead first came in.

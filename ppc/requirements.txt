@@ -1,0 +1,6 @@
+# Python 3.10 or newer.
+google-ads==33.0.0      # official Google Ads API client (API v25)
+playwright>=1.49        # browser fallback; then run: python -m playwright install chromium (or use Google Chrome)
+PyYAML>=6.0
+tzdata>=2024.1         # time zones on Windows
+pytest>=8               # only for running the tests

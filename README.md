@@ -46,6 +46,14 @@ Status: **Updated Build Map** · Build / Retell implementation: **Rosanes** · A
 7. **A caller who is a minor** stops seller qualification and goes to human escalation (`G-HUMAN`).
 8. Anything marked **PENDING CONFIRMATION** is not approved and must not be built as a guess.
 
+## PPC data exporter
+
+[`ppc/`](ppc/README.md) pulls the Google Ads reports used for PPC analysis (search terms, keywords,
+campaigns, ad groups, cities, conversions). It builds `exports/<date>/ppc_master_data.csv` and a
+Keyword + City + Spend + Clicks + Conversions table, ready for lead outcomes (qualified leads through
+profit). It prefers the Google Ads API and falls back to a browser session you sign in to yourself.
+Setup and credentials: [`ppc/README.md`](ppc/README.md).
+
 ## Superseded
 
 `docs/inbound-call-flow-v2.*` is the earlier v2.0 draft, kept for history only. Its routing and

@@ -1,0 +1,53 @@
+# THB PPC exporter settings.
+# Copy this file to ppc/config.yaml and fill it in. config.yaml is git-ignored,
+# so the values below never leave your computer. Never commit or screenshot them.
+
+# The Google Ads account to export: the 10-digit ID at the top of the Google
+# Ads screen. Dashes are fine.
+customer_id: ""
+
+# Office clock. "Yesterday" and the export folder's date use it.
+timezone: America/Los_Angeles
+
+# Default date range: the last N complete days, ending yesterday (the same
+# days as Google Ads' own "Last 30 days").
+default_days: 30
+
+# Where exports go. Relative paths are relative to the repo root.
+output_dir: exports
+
+api:
+  # Option A (Google's current recommended setup): a service-account key file.
+  # See README "Google Ads API setup". Keep the file outside the repo.
+  json_key_file_path: ""
+
+  # Option B: OAuth user credentials. Fill client_id + client_secret, then run
+  #   python ppc/export.py refresh-token
+  # which signs you in once in your browser and saves refresh_token here.
+  client_id: ""
+  client_secret: ""
+  refresh_token: ""
+
+  # Only if you reach the THB account through a manager (MCC) account:
+  # that manager account's 10-digit ID. Otherwise leave blank.
+  login_customer_id: ""
+
+  # Google retired developer tokens on 2026-09-09. Leave blank.
+  developer_token: ""
+
+browser:
+  # Your Google sign-in is kept here between runs, on this computer only.
+  profile_dir: ~/.thb-ppc-browser
+  # Blank = use installed Google Chrome, else Playwright's Chromium.
+  chrome_path: ""
+  # Optional: paste your Google Ads overview URL so the right account opens.
+  home_url: ""
+  login_timeout_minutes: 15
+  # Optional: Report Editor URLs, one per report (most reliable; see README).
+  saved_reports:
+    search_terms: ""
+    keywords: ""
+    campaigns: ""
+    ad_groups: ""
+    locations: ""
+    conversions: ""

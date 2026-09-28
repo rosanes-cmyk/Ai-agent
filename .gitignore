@@ -1,0 +1,14 @@
+# PPC exporter: credentials, account data and exports stay on the machine
+# that made them. Never commit these.
+ppc/config.yaml
+google-ads.yaml
+*-key.json
+*credentials*.json
+exports/
+.thb-ppc-browser*/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
