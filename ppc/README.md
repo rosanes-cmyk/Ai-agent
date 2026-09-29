@@ -126,10 +126,14 @@ clicking, done once.
    3. Run `python ppc/export.py refresh-token`. It first asks Google whether
       the client accepts `http://127.0.0.1:8723`, and if not, prints the link
       to the client's page and what to add, instead of opening a browser that
-      would stop at "Error 400: redirect_uri_mismatch". Then your browser
-      opens, you sign in with the Google account that can open THB's Google
-      Ads (password and 2-step verification are yours to do), and the token
-      is saved into `ppc/.env` (or `config.yaml`). The Google account needs
+      would stop at "Error 400: redirect_uri_mismatch". Then it prints a
+      short link, `http://127.0.0.1:8723/start`, and opens it in your default
+      browser. Use the browser you use for Google Ads (paste the short link
+      there if another one opened; never copy Google's long link out of
+      cmd, it breaks into "400. That's an error"). Sign in with the Google
+      account that can open THB's Google Ads (password and 2-step
+      verification are yours to do), and the token is saved into `ppc/.env`
+      (or `config.yaml`). The Google account needs
       2-step verification turned on. If another program already uses port
       8723, the command stops and names a free port to pass as `--port`
       (list that one on a Web client instead). It never uses 8080, where

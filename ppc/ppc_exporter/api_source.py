@@ -568,22 +568,23 @@ def redirect_problem(client_id, uri, session=None):
     return None
 
 
-def generate_refresh_token(client_id, client_secret, port=REDIRECT_PORT):
-    """Open the browser for the one-time OAuth consent; return (refresh token, granted scopes).
+def generate_refresh_token(client_id, client_secret, port=REDIRECT_PORT, say=print, open_browser=True):
+    """Run the one-time OAuth consent; return (refresh token, granted scopes).
 
-    The person signs in themselves (password, MFA, any security prompts);
-    this only receives the token Google hands back on localhost. Google lets
-    them untick a permission; oauthlib would then raise "Scope has changed",
-    so it is told to accept that and the caller checks what was granted.
+    The person signs in themselves (password, MFA, any security prompts), in
+    the browser they choose. Google's sign-in link is ~450 characters and
+    breaks when copied out of a wrapped cmd window ("400. That's an error"),
+    so a short link, http://127.0.0.1:8723/start, forwards to it; Google
+    then sends its answer back to http://127.0.0.1:8723. Google lets them
+    untick a permission; oauthlib would then raise "Scope has changed", so it
+    is told to accept that and the caller checks what was granted.
     """
 
     os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
+    import webbrowser
     import wsgiref.simple_server
 
     from google_auth_oauthlib.flow import InstalledAppFlow
-
-    # Never share the port with another program (SO_REUSEADDR allows that on Windows).
-    wsgiref.simple_server.WSGIServer.allow_reuse_address = False
 
     flow = InstalledAppFlow.from_client_config(
         {
@@ -596,15 +597,56 @@ def generate_refresh_token(client_id, client_secret, port=REDIRECT_PORT):
         },
         scopes=[OAUTH_SCOPE, DATAMANAGER_SCOPE],
     )
-    credentials = flow.run_local_server(
-        host=REDIRECT_HOST,
-        port=port,
-        redirect_uri_trailing_slash=False,
-        access_type="offline",
-        prompt="consent",
-        authorization_prompt_message="Opening your browser to sign in to Google...\nIf it does not open, visit:\n{url}",
-        success_message="Signed in. You can close this tab and return to the terminal.",
-    )
+    flow.redirect_uri = redirect_uri(port)
+    auth_url, _state = flow.authorization_url(access_type="offline", prompt="consent")
+    answer = {}
+
+    def app(environ, start_response):
+        path, query = environ.get("PATH_INFO") or "/", environ.get("QUERY_STRING", "")
+        if path == "/start":
+            start_response("302 Found", [("Location", auth_url), ("Cache-Control", "no-store")])
+            return [b""]
+        params = urllib.parse.parse_qs(query)
+        if path == "/" and ("code" in params or "error" in params):
+            answer["query"] = query
+            text = ("Signed in. You can close this tab and return to the terminal." if "code" in params
+                    else "Google did not finish the sign-in. Return to the terminal.")
+            start_response("200 OK", [("Content-Type", "text/plain; charset=utf-8")])
+            return [text.encode()]
+        start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")])
+        return [f"To sign in, open {redirect_uri(port)}/start".encode()]
+
+    class Server(wsgiref.simple_server.WSGIServer):
+        allow_reuse_address = False  # never share the port with another program (SO_REUSEADDR allows that on Windows)
+        timeout = 1  # wake every second so Ctrl+C works on Windows
+
+    class Quiet(wsgiref.simple_server.WSGIRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+    server = wsgiref.simple_server.make_server(REDIRECT_HOST, port, app, server_class=Server, handler_class=Quiet)
+    start = f"{redirect_uri(port)}/start"
+    try:
+        say("A browser may open by itself. If it is not the one you use for Google Ads, paste this")
+        say("short link into that browser instead (either works, only one is needed):")
+        say(f"\n    {start}\n")
+        say("Waiting for Google... (Ctrl+C stops)")
+        if open_browser:
+            webbrowser.open(start, new=1)
+        while "query" not in answer:
+            server.handle_request()
+    finally:
+        server.server_close()
+
+    params = urllib.parse.parse_qs(answer["query"])
+    if "error" in params:
+        raise ApiAccessError(f"Google did not finish the sign-in ({params['error'][0]}). Run the command again and click Continue.")
+    try:
+        # oauthlib only reads code and state from this; it insists on an https address.
+        flow.fetch_token(authorization_response=f"https://{REDIRECT_HOST}:{port}/?{answer['query']}")
+    except Exception as problem:
+        raise ApiAccessError(f"Google did not accept the sign-in ({problem}). Run the command again.") from problem
+    credentials = flow.credentials
     if not credentials.refresh_token:
         raise ApiAccessError("Google did not return a refresh token. Run the command again.")
     granted = credentials.granted_scopes

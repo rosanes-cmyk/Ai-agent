@@ -347,10 +347,10 @@ def cmd_refresh_token(settings, args, _start, _end):
     if problem == "disabled_client":
         log(f"This OAuth client is disabled in Google Cloud. Turn it back on: {api_source.client_page(api['client_id'])}")
         return EXIT_SETUP
-    log("A browser window opens. Sign in with the Google account that runs THB's Google Ads and allow both")
-    log("permissions (Google Ads, and Data Manager for sending lead results back). Ctrl+C stops waiting.")
+    log("Sign in with the Google account that runs THB's Google Ads and tick both permissions")
+    log("(Google Ads, and Data Manager for sending lead results back).")
     try:
-        token, granted = api_source.generate_refresh_token(api["client_id"], api["client_secret"], port=args.port)
+        token, granted = api_source.generate_refresh_token(api["client_id"], api["client_secret"], port=args.port, say=log)
     except OSError as busy:
         spare = api_source.free_port_after(args.port)
         log(f"Port {args.port} could not be opened on this computer ({busy.strerror or busy}). Use another:")

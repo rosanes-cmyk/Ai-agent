@@ -232,29 +232,89 @@ def test_refresh_token_reports_an_unticked_permission(tmp_path, monkeypatch, cap
     assert ("1//new" in env.read_text()) is saved
 
 
-def test_refresh_token_accepts_a_partial_grant_from_google(monkeypatch):
-    """oauthlib raises "Scope has changed" on a partial grant unless told to relax."""
+def _sign_in(monkeypatch, answer_path):
+    """Run generate_refresh_token on a free port; play the browser: /start, a favicon, then Google's answer."""
 
+    import http.client
+    import socket
+    import threading
+    import time
     import types
+    import urllib.parse
+
     import google_auth_oauthlib.flow as flow_module
     from ppc_exporter import api_source
+
+    seen = {}
 
     class FakeFlow:
         @classmethod
         def from_client_config(cls, config_, scopes):
+            seen["scopes"] = scopes
             return cls()
 
-        def run_local_server(self, **kw):
+        def authorization_url(self, **kw):
             assert os.environ.get("OAUTHLIB_RELAX_TOKEN_SCOPE") == "1"
-            # Exactly http://127.0.0.1:8723, the address a Web-application client must list.
-            assert (kw["host"], kw["port"], kw["redirect_uri_trailing_slash"]) == ("127.0.0.1", 8723, False)
-            import wsgiref.simple_server
-            assert wsgiref.simple_server.WSGIServer.allow_reuse_address is False
-            return types.SimpleNamespace(refresh_token="1//x", granted_scopes=["https://www.googleapis.com/auth/adwords"])
+            seen["auth_kw"] = kw
+            return "https://accounts.google.com/o/oauth2/auth?redirect_uri=" + urllib.parse.quote(self.redirect_uri, safe=""), "st"
+
+        def fetch_token(self, authorization_response):
+            seen["response"] = authorization_response
+            self.credentials = types.SimpleNamespace(refresh_token="1//x", granted_scopes=["https://www.googleapis.com/auth/adwords"])
 
     monkeypatch.delenv("OAUTHLIB_RELAX_TOKEN_SCOPE", raising=False)
     monkeypatch.setattr(flow_module, "InstalledAppFlow", FakeFlow)
-    assert api_source.generate_refresh_token("id", "secret") == ("1//x", {"https://www.googleapis.com/auth/adwords"})
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+
+    out, lines = {}, []
+
+    def run():
+        try:
+            out["result"] = api_source.generate_refresh_token("id", "secret", port=port, say=lines.append, open_browser=False)
+        except Exception as problem:  # handed to the test thread
+            out["error"] = problem
+
+    worker = threading.Thread(target=run)
+    worker.start()
+
+    def get(path):
+        for _ in range(100):
+            try:
+                conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                conn.request("GET", path)
+                response = conn.getresponse()
+                return response.status, response.getheader("Location"), response.read().decode()
+            except (ConnectionRefusedError, ConnectionResetError):
+                time.sleep(0.05)
+        raise AssertionError("local sign-in server never answered")
+
+    replies = [get("/start"), get("/favicon.ico"), get(answer_path)]
+    worker.join(15)
+    assert not worker.is_alive()
+    return port, seen, out, lines, replies
+
+
+def test_sign_in_uses_a_short_start_link_then_takes_googles_answer(monkeypatch):
+    """Google's own link is ~450 characters and broke when copied out of cmd ("400. That's an error")."""
+
+    port, seen, out, lines, (start, favicon, answer) = _sign_in(monkeypatch, "/?state=st&code=4%2Fabc&scope=x")
+    assert start[0] == 302 and start[1].startswith("https://accounts.google.com/")
+    assert f"redirect_uri=http%3A%2F%2F127.0.0.1%3A{port}" in start[1]
+    assert favicon[0] == 404  # a stray request does not end the wait
+    assert answer[0] == 200 and "Signed in" in answer[2]
+    assert out["result"] == ("1//x", {"https://www.googleapis.com/auth/adwords"})
+    assert seen["auth_kw"] == {"access_type": "offline", "prompt": "consent"}
+    assert seen["response"] == f"https://127.0.0.1:{port}/?state=st&code=4%2Fabc&scope=x"
+    assert any(line.strip() == f"http://127.0.0.1:{port}/start" for line in lines)
+
+
+def test_sign_in_refused_in_the_browser_says_so(monkeypatch):
+    _port, _seen, out, _lines, (_start, _favicon, answer) = _sign_in(monkeypatch, "/?error=access_denied&state=st")
+    assert answer[0] == 200 and "did not finish" in answer[2]
+    assert "access_denied" in str(out["error"]) and "result" not in out
 
 
 class FakeAuthSession:
