@@ -55,6 +55,12 @@ DEFAULTS = {
         "login_timeout_minutes": 15,
         "saved_reports": {},
     },
+    # Lead results go to conversion actions named offline_qualified_lead and so
+    # on. If THB's own actions have other names, map them here, e.g.
+    # feedback: {actions: {offline_qualified_lead: "THB - Qualified lead"}}.
+    "feedback": {
+        "actions": {},
+    },
 }
 
 

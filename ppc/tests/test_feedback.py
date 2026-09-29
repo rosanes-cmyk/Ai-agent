@@ -139,10 +139,17 @@ def api_settings(tmp_path):
     return loaded
 
 
-def fake_actions(monkeypatch, missing=()):
-    names = {"offline_qualified_lead": 11, "offline_appointment_set": 12, "offline_poor_location": 13, "offline_closed_deal": 14}
-    table = {n: (i, "UPLOAD_CLICKS") for n, i in names.items() if n not in missing}
-    monkeypatch.setattr(feedback, "conversion_actions", lambda client, cid, wanted: {n: v for n, v in table.items() if n in wanted})
+def fake_actions(monkeypatch, missing=(), owner="9897155298", asked=None):
+    names = {"offline_qualified_lead": 11, "offline_appointment_set": 12, "offline_poor_location": 13, "offline_closed_deal": 14,
+             "THB - Qualified lead": 21}
+    table = {n: (i, "UPLOAD_CLICKS", owner) for n, i in names.items() if n not in missing}
+
+    def lookup(client, cid, wanted):
+        if asked is not None:
+            asked.update(wanted)
+        return {n: v for n, v in table.items() if n in wanted}
+
+    monkeypatch.setattr(feedback, "conversion_actions", lookup)
 
 
 def test_run_validates_by_default_one_request_per_action(monkeypatch, outcomes, api_settings):
@@ -587,3 +594,46 @@ def test_results_and_send_together_are_refused(tmp_path):
     result = subprocess.run([sys.executable, os.path.join(here, "export.py"), "upload", "--results", "--send", "--config",
                              str(tmp_path / "none.yaml")], capture_output=True, text=True, env=env, timeout=60)
     assert result.returncode == 2 and "only reads" in result.stdout
+
+
+# ------------------------------------------- actions owned by another account --
+
+
+def test_actions_owned_by_a_former_manager_account_are_explained_not_sent(monkeypatch, outcomes, api_settings):
+    """THB's offline_* actions belong to 119-568-5646 (Bateman era, link inactive): Google said "Resource not found"."""
+
+    fake_actions(monkeypatch, owner="1195685646")
+    session, lines = FakeSession(), []
+    code = feedback.run(api_settings, outcomes, now=NOW, client=object(), session=session, token="t", log=lines.append)
+    assert code == 1 and session.calls == []
+    text = "\n".join(lines)
+    assert "belongs to another Google Ads account (119-568-5646), not 989-715-5298" in text
+    assert "'Import from clicks' conversion action named offline_qualified_lead" in text
+
+
+def test_own_action_wins_over_a_managers_action_with_the_same_name(monkeypatch):
+    import types
+
+    import ppc_exporter.api_source as api
+
+    def row(action_id, owner):
+        return types.SimpleNamespace(conversion_action=types.SimpleNamespace(
+            id=action_id, name="offline_qualified_lead", type_=types.SimpleNamespace(name="UPLOAD_CLICKS"),
+            owner_customer=f"customers/{owner}"))
+
+    monkeypatch.setattr(api, "stream", lambda client, cid, query: [row(950298127, 1195685646), row(555, 9897155298)])
+    assert feedback.conversion_actions(object(), "9897155298", {"offline_qualified_lead"}) == \
+        {"offline_qualified_lead": (555, "UPLOAD_CLICKS", "9897155298")}
+    monkeypatch.setattr(api, "stream", lambda client, cid, query: [row(950298127, 1195685646)])
+    assert feedback.conversion_actions(object(), "9897155298", {"offline_qualified_lead"})["offline_qualified_lead"][2] == "1195685646"
+
+
+def test_actions_can_be_renamed_in_settings(monkeypatch, outcomes, api_settings):
+    asked = set()
+    fake_actions(monkeypatch, asked=asked)
+    api_settings["feedback"]["actions"] = {"offline_qualified_lead": "THB - Qualified lead"}
+    session = FakeSession()
+    feedback.run(api_settings, outcomes, now=NOW, client=object(), session=session, token="t", log=lambda *_: None)
+    assert "THB - Qualified lead" in asked and "offline_qualified_lead" not in asked
+    sent_to = {body["destinations"][0]["productDestinationId"] for _, body, _ in session.calls}
+    assert "21" in sent_to and "11" not in sent_to

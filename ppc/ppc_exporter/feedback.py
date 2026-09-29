@@ -217,17 +217,37 @@ def destination(customer_id, login_id, action_id):
 
 
 def conversion_actions(client, customer_id, names):
-    """{name: (id, type)} for the enabled conversion actions with these names."""
+    """{name: (id, type, owner account id)} for the enabled conversion actions with these names.
+
+    An account also lists actions owned by a manager account it was linked to
+    (cross-account conversion tracking), which it cannot send to. When two
+    share a name, the one this account owns wins.
+    """
 
     from . import api_source
 
     quoted = ", ".join("'" + n.replace("'", "\\'") + "'" for n in sorted(names))
     rows = api_source.stream(
         client, customer_id,
-        "SELECT conversion_action.id, conversion_action.name, conversion_action.type FROM conversion_action "
-        f"WHERE conversion_action.status = 'ENABLED' AND conversion_action.name IN ({quoted})",
+        "SELECT conversion_action.id, conversion_action.name, conversion_action.type, conversion_action.owner_customer "
+        f"FROM conversion_action WHERE conversion_action.status = 'ENABLED' AND conversion_action.name IN ({quoted})",
     )
-    return {r.conversion_action.name: (r.conversion_action.id, r.conversion_action.type_.name) for r in rows}
+    found = {}
+    for r in rows:
+        action = r.conversion_action
+        owner = digits(action.owner_customer) or customer_id
+        if action.name not in found or owner == customer_id:
+            found[action.name] = (action.id, action.type_.name, owner)
+    return found
+
+
+def events_word(n):
+    return f"{n} event" + ("" if n == 1 else "s")
+
+
+def dashed(account_id):
+    text = digits(account_id)
+    return f"{text[:3]}-{text[3:6]}-{text[6:]}" if len(text) == 10 else text
 
 
 def credentials(settings):
@@ -453,6 +473,8 @@ def run(settings, path=None, *, leads=None, send_for_real=False, done_message=No
         log("Nothing to send: no lead has a click ID or contact detail together with a status.")
         return 2
 
+    renamed = (settings.get("feedback") or {}).get("actions") or {}
+    events = {renamed.get(name, name): batch for name, batch in events.items()}
     customer_id = digits(settings["customer_id"])
     if client is None:
         from . import api_source
@@ -470,10 +492,16 @@ def run(settings, path=None, *, leads=None, send_for_real=False, done_message=No
     for action, batch in sorted(events.items()):
         if action not in actions:
             log(f"  {action}: not in the Google Ads account (or not enabled). Create it as an 'Import from clicks' "
-                f"conversion action, or these {len(batch)} events are skipped.")
+                f"conversion action, or {events_word(len(batch))} skipped.")
             worst = max(worst, 1)
             continue
-        action_id, action_type = actions[action]
+        action_id, action_type, owner = actions[action]
+        if owner != customer_id:
+            log(f"  {action}: belongs to another Google Ads account ({dashed(owner)}), not {dashed(customer_id)}, so it can't")
+            log(f"    take uploads from here (Google calls this \"Resource not found\"). Create {dashed(customer_id)}'s own")
+            log(f"    'Import from clicks' conversion action named {action}; {events_word(len(batch))} skipped until then.")
+            worst = max(worst, 1)
+            continue
         if action_type != "UPLOAD_CLICKS":
             log(f"  {action}: is a {action_type} action; only 'Import from clicks' actions accept uploads. Skipped.")
             worst = max(worst, 1)

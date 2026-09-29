@@ -325,6 +325,14 @@ go through Google's **Data Manager API**. `upload` sends each status in
 | closed_deal (value = profit) | `offline_closed_deal`, which you create first as an "Import from clicks" action |
 | not_qualified_reason | `offline_no_contact`, `offline_non_seller`, `offline_poor_location`, `offline_retail`, `offline_unqualified_seller`, `offline_fraud` |
 
+The actions must belong to THB's own account. The offline_* actions made
+during the Bateman period are owned by a manager account whose link is now
+inactive (119-568-5646); the account still lists them but cannot send to
+them, and Google answers "Resource not found". `upload` checks the owner and
+says so. Create THB's own "Import from clicks" actions (same names are fine;
+THB's own copy wins), or map other names in `config.yaml`:
+`feedback: {actions: {offline_qualified_lead: "THB - Qualified lead"}}`.
+
 One-time setup:
 
 1. Turn on the Data Manager API in the same Google Cloud project as your OAuth
