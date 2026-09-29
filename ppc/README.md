@@ -119,11 +119,19 @@ clicking, done once.
       Google expires the token every 7 days.
    2. <https://console.cloud.google.com/auth/clients>, then **Create client >
       Desktop app**. Copy the client ID and secret into `ppc/config.yaml`
-      (`api.client_id`, `api.client_secret`).
-   3. Run `python ppc/export.py refresh-token`. Your browser opens, you sign in
-      with the Google account that can open THB's Google Ads (password and
-      2-step verification are yours to do), and the token is saved into
-      `config.yaml`. The Google account needs 2-step verification turned on.
+      (`api.client_id`, `api.client_secret`). Already have a **Web
+      application** client (for example one made for the OAuth Playground)?
+      It works too, once it lists `http://127.0.0.1:8080` (exactly that, no
+      trailing slash) under **Authorized redirect URIs**.
+   3. Run `python ppc/export.py refresh-token`. It first asks Google whether
+      the client accepts `http://127.0.0.1:8080`, and if not, prints the link
+      to the client's page and what to add, instead of opening a browser that
+      would stop at "Error 400: redirect_uri_mismatch". Then your browser
+      opens, you sign in with the Google account that can open THB's Google
+      Ads (password and 2-step verification are yours to do), and the token
+      is saved into `ppc/.env` (or `config.yaml`). The Google account needs
+      2-step verification turned on. Port 8080 busy? Add `--port 8081` and
+      list `http://127.0.0.1:8081` on a Web client instead.
 5. **Account ID.** In `ppc/config.yaml`, set `customer_id` to the 10-digit ID
    at the top of Google Ads (dashes are fine). Only if you reach THB through a
    manager account (e.g. an agency MCC), also set `api.login_customer_id` to

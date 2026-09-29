@@ -6,8 +6,11 @@ credentials, and either a service-account key file or an OAuth refresh
 token proves who is asking. See ppc/README.md for the setup steps.
 """
 
+import base64
 import os
+import re
 import time
+import urllib.parse
 
 from . import queries, schema
 from .settings import digits
@@ -18,6 +21,12 @@ OAUTH_SCOPE = "https://www.googleapis.com/auth/adwords"
 # Uploading lead outcomes goes through the Data Manager API, which needs its
 # own permission on the same sign-in.
 DATAMANAGER_SCOPE = "https://www.googleapis.com/auth/datamanager"
+# refresh-token receives Google's answer here. Desktop-app OAuth clients accept
+# any local address; a Web-application client must list this exact one
+# (no trailing slash) under Authorized redirect URIs. It is the address
+# Google's own Google Ads sign-in example uses.
+REDIRECT_HOST, REDIRECT_PORT = "127.0.0.1", 8080
+AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
 
 
 class ApiNotConfigured(Exception):
@@ -490,7 +499,45 @@ def check(settings, start, end, log=print):
     return account, results
 
 
-def generate_refresh_token(client_id, client_secret):
+def redirect_uri(port=REDIRECT_PORT):
+    return f"http://{REDIRECT_HOST}:{port}"
+
+
+def client_page(client_id):
+    """Cloud console page of this OAuth client. Its ID starts with the owning project's number."""
+
+    number = re.match(r"(\d+)-", client_id or "")
+    return f"https://console.cloud.google.com/auth/clients/{client_id}" + (f"?project={number.group(1)}" if number else "")
+
+
+def redirect_problem(client_id, uri, session=None):
+    """Why Google would refuse this sign-in before anyone signs in, or None.
+
+    Google checks the client ID and return address before it shows a sign-in
+    page, so asking needs no password and changes nothing. Anything
+    unexpected (no network, a new error format) gives None and the normal
+    sign-in goes ahead.
+    """
+
+    try:
+        import requests
+
+        query = urllib.parse.urlencode({"client_id": client_id, "redirect_uri": uri, "response_type": "code", "scope": OAUTH_SCOPE})
+        response = (session or requests.Session()).get(f"{AUTH_URI}?{query}", allow_redirects=False, timeout=20)
+        location = response.headers.get("Location", "")
+        if "/signin/oauth/error" not in location:
+            return None
+        blob = urllib.parse.parse_qs(urllib.parse.urlparse(location).query).get("authError", [""])[0]
+        detail = base64.urlsafe_b64decode(blob + "=" * (-len(blob) % 4))
+    except Exception:
+        return None
+    for reason in ("redirect_uri_mismatch", "deleted_client", "invalid_client", "disabled_client"):
+        if reason.encode() in detail:
+            return reason
+    return None
+
+
+def generate_refresh_token(client_id, client_secret, port=REDIRECT_PORT):
     """Open the browser for the one-time OAuth consent; return (refresh token, granted scopes).
 
     The person signs in themselves (password, MFA, any security prompts);
@@ -514,7 +561,9 @@ def generate_refresh_token(client_id, client_secret):
         scopes=[OAUTH_SCOPE, DATAMANAGER_SCOPE],
     )
     credentials = flow.run_local_server(
-        port=0,
+        host=REDIRECT_HOST,
+        port=port,
+        redirect_uri_trailing_slash=False,
         access_type="offline",
         prompt="consent",
         authorization_prompt_message="Opening your browser to sign in to Google...\nIf it does not open, visit:\n{url}",

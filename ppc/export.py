@@ -322,9 +322,32 @@ def cmd_refresh_token(settings, args, _start, _end):
     if not (api.get("client_id") and api.get("client_secret")):
         log("Put your OAuth client_id and client_secret in ppc/.env or ppc/config.yaml first (see README, OAuth option).")
         return EXIT_SETUP
+    uri = api_source.redirect_uri(args.port)
+    problem = api_source.redirect_problem(api["client_id"], uri)
+    if problem == "redirect_uri_mismatch":
+        log("Google won't send the sign-in back to this computer yet: your OAuth client does not list")
+        log(f"{uri} as an allowed return address. One-time fix, about a minute:")
+        log(f"  1. Open {api_source.client_page(api['client_id'])}")
+        log("     (with a Google account that can edit that Google Cloud project)")
+        log(f"  2. Under 'Authorized redirect URIs' click 'Add URI' and enter exactly:  {uri}")
+        log("  3. Click Save, wait 5 minutes, then run this command again.")
+        return EXIT_SETUP
+    if problem in ("deleted_client", "invalid_client"):
+        log("Google doesn't recognise the OAuth client_id in ppc/.env (deleted, or not copied whole).")
+        log(f"Check it at {api_source.client_page(api['client_id'])}")
+        return EXIT_SETUP
+    if problem == "disabled_client":
+        log(f"This OAuth client is disabled in Google Cloud. Turn it back on: {api_source.client_page(api['client_id'])}")
+        return EXIT_SETUP
     log("A browser window opens. Sign in with the Google account that runs THB's Google Ads and allow both")
-    log("permissions (Google Ads, and Data Manager for sending lead results back).")
-    token, granted = api_source.generate_refresh_token(api["client_id"], api["client_secret"])
+    log("permissions (Google Ads, and Data Manager for sending lead results back). Ctrl+C stops waiting.")
+    try:
+        token, granted = api_source.generate_refresh_token(api["client_id"], api["client_secret"], port=args.port)
+    except OSError as busy:
+        log(f"Port {args.port} is already in use on this computer ({busy.strerror or busy}). Close the program using it,")
+        log(f"or run: python ppc/export.py refresh-token --port {args.port + 1}  (then add {api_source.redirect_uri(args.port + 1)}")
+        log("to the OAuth client's Authorized redirect URIs too).")
+        return EXIT_SETUP
     if api_source.OAUTH_SCOPE not in granted:
         log("The Google Ads permission was not ticked, so nothing was saved. Run this again and tick both boxes.")
         return EXIT_SETUP
@@ -437,6 +460,7 @@ def parser():
 
     t = command("refresh-token", "one-time Google sign-in to create an OAuth refresh token")
     t.add_argument("--print-only", action="store_true", help="print the token instead of saving it")
+    t.add_argument("--port", type=int, default=api_source.REDIRECT_PORT, help="local port Google returns the sign-in to (default 8080)")
 
     u = command("upload", "send lead statuses back to Google Ads (validates only, unless --send)")
     u.add_argument("--file", help="lead results CSV (default: exports/lead_outcomes.csv)")

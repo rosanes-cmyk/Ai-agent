@@ -222,7 +222,8 @@ def test_refresh_token_reports_an_unticked_permission(tmp_path, monkeypatch, cap
 
     env = tmp_path / ".env"
     env.write_text("GOOGLE_ADS_CLIENT_ID=abc\nGOOGLE_ADS_CLIENT_SECRET=s\nGOOGLE_ADS_REFRESH_TOKEN=1//old\n")
-    monkeypatch.setattr(export.api_source, "generate_refresh_token", lambda *_: ("1//new", granted))
+    monkeypatch.setattr(export.api_source, "redirect_problem", lambda *_: None)
+    monkeypatch.setattr(export.api_source, "generate_refresh_token", lambda *_a, **_k: ("1//new", granted))
     for name in [k for k in os.environ if k.startswith("GOOGLE_ADS_")]:
         monkeypatch.delenv(name)
     assert export.main(["refresh-token", "--config", str(tmp_path / "config.yaml")]) == code
@@ -242,13 +243,86 @@ def test_refresh_token_accepts_a_partial_grant_from_google(monkeypatch):
         def from_client_config(cls, config_, scopes):
             return cls()
 
-        def run_local_server(self, **_kw):
+        def run_local_server(self, **kw):
             assert os.environ.get("OAUTHLIB_RELAX_TOKEN_SCOPE") == "1"
+            # Exactly http://127.0.0.1:8080, the address a Web-application client must list.
+            assert (kw["host"], kw["port"], kw["redirect_uri_trailing_slash"]) == ("127.0.0.1", 8080, False)
             return types.SimpleNamespace(refresh_token="1//x", granted_scopes=["https://www.googleapis.com/auth/adwords"])
 
     monkeypatch.delenv("OAUTHLIB_RELAX_TOKEN_SCOPE", raising=False)
     monkeypatch.setattr(flow_module, "InstalledAppFlow", FakeFlow)
     assert api_source.generate_refresh_token("id", "secret") == ("1//x", {"https://www.googleapis.com/auth/adwords"})
+
+
+class FakeAuthSession:
+    """Google's authorization endpoint: a 302 to a sign-in page, or to an error page."""
+
+    def __init__(self, location):
+        self.location, self.urls = location, []
+
+    def get(self, url, allow_redirects, timeout):
+        import types
+
+        self.urls.append(url)
+        return types.SimpleNamespace(status_code=302, headers={"Location": self.location})
+
+
+def google_error_page(reason):
+    import base64
+
+    blob = base64.urlsafe_b64encode(b"\x08\x01\x12\x15" + reason.encode() + b"\x1a\x10You can't sign in").decode().rstrip("=")
+    return f"https://accounts.google.com/signin/oauth/error?authError={blob}&client_id=1-x"
+
+
+def test_redirect_problem_reads_googles_answer():
+    from ppc_exporter import api_source
+
+    session = FakeAuthSession(google_error_page("redirect_uri_mismatch"))
+    assert api_source.redirect_problem("123-abc.apps.googleusercontent.com", "http://127.0.0.1:8080", session) == "redirect_uri_mismatch"
+    assert "redirect_uri=http%3A%2F%2F127.0.0.1%3A8080" in session.urls[0]
+    fine = FakeAuthSession("https://accounts.google.com/v3/signin/identifier?x=1")
+    assert api_source.redirect_problem("123-abc", "http://127.0.0.1:8080", fine) is None
+    assert api_source.redirect_problem("123-abc", "http://127.0.0.1:8080", FakeAuthSession(google_error_page("something_new"))) is None
+
+    class Offline:
+        def get(self, *_a, **_k):
+            raise OSError("no network")
+
+    assert api_source.redirect_problem("123-abc", "http://127.0.0.1:8080", Offline()) is None
+    assert api_source.client_page("9876-abc.apps.googleusercontent.com") == \
+        "https://console.cloud.google.com/auth/clients/9876-abc.apps.googleusercontent.com?project=9876"
+
+
+def test_refresh_token_explains_an_unregistered_return_address(tmp_path, monkeypatch, capsys):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import export
+
+    (tmp_path / ".env").write_text("GOOGLE_ADS_CLIENT_ID=4242-abc.apps.googleusercontent.com\nGOOGLE_ADS_CLIENT_SECRET=s\n")
+    for name in [k for k in os.environ if k.startswith("GOOGLE_ADS_")]:
+        monkeypatch.delenv(name)
+    monkeypatch.setattr(export.api_source, "redirect_problem", lambda *_: "redirect_uri_mismatch")
+    monkeypatch.setattr(export.api_source, "generate_refresh_token", lambda *_a, **_k: pytest.fail("browser must not open"))
+    assert export.main(["refresh-token", "--config", str(tmp_path / "config.yaml")]) == export.EXIT_SETUP
+    out = capsys.readouterr().out
+    assert "enter exactly:  http://127.0.0.1:8080" in out
+    assert "auth/clients/4242-abc.apps.googleusercontent.com?project=4242" in out
+
+
+def test_refresh_token_on_a_busy_port_suggests_another(tmp_path, monkeypatch, capsys):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import export
+
+    (tmp_path / ".env").write_text("GOOGLE_ADS_CLIENT_ID=4242-abc\nGOOGLE_ADS_CLIENT_SECRET=s\n")
+    for name in [k for k in os.environ if k.startswith("GOOGLE_ADS_")]:
+        monkeypatch.delenv(name)
+    monkeypatch.setattr(export.api_source, "redirect_problem", lambda *_: None)
+
+    def busy(*_a, **_k):
+        raise OSError(98, "Address already in use")
+
+    monkeypatch.setattr(export.api_source, "generate_refresh_token", busy)
+    assert export.main(["refresh-token", "--config", str(tmp_path / "config.yaml")]) == export.EXIT_SETUP
+    assert "refresh-token --port 8081" in capsys.readouterr().out
 
 
 def test_upload_command_without_credentials_says_what_is_missing(tmp_path):
