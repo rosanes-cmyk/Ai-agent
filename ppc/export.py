@@ -350,7 +350,13 @@ def cmd_upload(settings, args, _start, _end):
     if missing:
         raise api_source.ApiNotConfigured(missing)
     outcomes = str(config.output_root(settings, args.out) / master.OUTCOMES_FILE)
+    upload_log = str(config.output_root(settings, args.out) / feedback.LOG_FILE)
     try:
+        if args.results:
+            if args.send or args.test:
+                log("--results only reads Google's report; run it on its own.")
+                return EXIT_SETUP
+            return feedback.results(settings, upload_log, log=log)
         if args.test:
             if args.send:
                 log("--test never records anything; run it without --send.")
@@ -363,7 +369,7 @@ def cmd_upload(settings, args, _start, _end):
             return feedback.run(settings, leads=[lead], client=client, done_message=done, log=log)
         path = os.path.expanduser(args.file) if args.file else outcomes
         log(f"Lead results file: {path}")
-        return feedback.run(settings, path, send_for_real=args.send, log=log)
+        return feedback.run(settings, path, send_for_real=args.send, upload_log=upload_log, log=log)
     except feedback.FeedbackError as problem:
         log(str(problem))
         return EXIT_SETUP
@@ -436,6 +442,7 @@ def parser():
     u.add_argument("--file", help="lead results CSV (default: exports/lead_outcomes.csv)")
     u.add_argument("--send", action="store_true", help="record the conversions in Google Ads (default: validate only)")
     u.add_argument("--test", action="store_true", help="check the whole upload path with one real recent click; records nothing")
+    u.add_argument("--results", action="store_true", help="show what Google recorded for each upload sent with --send")
 
     c = command("open-chrome", "open a normal Chrome window for --attach")
     c.add_argument("--port", type=int, default=9222)

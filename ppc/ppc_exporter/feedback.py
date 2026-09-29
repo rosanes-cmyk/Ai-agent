@@ -13,8 +13,10 @@ checks them and records nothing. transaction_id is the lead ID plus the
 stage, so sending the same file twice never counts a status twice.
 """
 
+import csv
 import datetime
 import hashlib
+import os
 import re
 
 from . import master, schema
@@ -23,6 +25,7 @@ from .settings import digits, office_zone
 DATAMANAGER_SCOPE = "https://www.googleapis.com/auth/datamanager"
 ADWORDS_SCOPE = "https://www.googleapis.com/auth/adwords"
 ENDPOINT = "https://datamanager.googleapis.com/v1/events:ingest"
+STATUS_ENDPOINT = "https://datamanager.googleapis.com/v1/requestStatus:retrieve"
 ENABLE_API = "https://console.cloud.google.com/apis/library/datamanager.googleapis.com"
 MAX_EVENTS = 2000
 # The offline_* actions accept clicks up to 90 days old.
@@ -50,6 +53,42 @@ REASON_ACTIONS = {
     "fraud": "offline_fraud",
     "spam": "offline_fraud",
 }
+
+
+# Every real send is logged here (next to lead_outcomes.csv) so --results can
+# ask Google later how it processed each one.
+LOG_FILE = "upload_log.csv"
+LOG_COLUMNS = ["sent_at", "action", "events", "request_id", "status", "problems", "details", "checked_at"]
+FINAL_STATUSES = {"SUCCESS", "PARTIAL_SUCCESS", "FAILED"}
+STATUS_WORDS = {
+    "SUCCESS": "all recorded",
+    "PARTIAL_SUCCESS": "some recorded",
+    "FAILED": "none recorded",
+    "PROCESSING": "Google is still processing",
+    "REQUEST_STATUS_UNKNOWN": "unknown",
+}
+# Google's processing reasons that people will actually see, in plain words.
+REASON_HINTS = {
+    "DUPLICATE_TRANSACTION_ID": "already sent before, not counted twice",
+    "DUPLICATE_GCLID": "this click already has a conversion at that time",
+    "EVENT_TOO_OLD": "the click is older than Google accepts (90 days)",
+    "TOO_RECENT_CLICK": "the click was under 6 hours ago; send again later (it won't count twice)",
+    "CLICK_NOT_FOUND": "Google can't find the click; check the gclid was copied whole",
+    "INVALID_CLICK": "Google can't tie it to a click; check the gclid",
+    "INVALID_GCLID": "the gclid is damaged; copy it again from the lead record",
+    "INVALID_GBRAID": "the gbraid is damaged",
+    "INVALID_WBRAID": "the wbraid is damaged",
+    "INVALID_OPERATING_ACCOUNT_FOR_CLICK": "the click belongs to another Google Ads account",
+    "OPERATING_ACCOUNT_MISMATCH_FOR_AD_IDENTIFIER": "the click belongs to another Google Ads account",
+    "CONVERSION_PRECEDES_CLICK": "lead_date is before the click; check the date",
+    "DENIED_CONSENT": "blocked by the account's consent settings",
+    "NO_CONSENT": "blocked by the account's consent settings",
+    "UNKNOWN_CONSENT": "Google can't tell whether the person consented",
+    "DESTINATION_ACCOUNT_ENHANCED_CONVERSIONS_TERMS_NOT_SIGNED":
+        "accept the customer data terms in Google Ads (Goals, Settings) to match by email or phone",
+}
+# Not a problem: re-sending a file is safe by design.
+HARMLESS_REASONS = {"DUPLICATE_TRANSACTION_ID"}
 
 
 class FeedbackError(Exception):
@@ -194,8 +233,6 @@ def conversion_actions(client, customer_id, names):
 def credentials(settings):
     """Google credentials carrying the Data Manager scope."""
 
-    import os
-
     api = settings["api"]
     if api.get("json_key_file_path"):
         from google.oauth2 import service_account
@@ -243,13 +280,125 @@ def explain_http(status, payload):
     return f"Google rejected the upload ({status}): {message}" + ("\n  " + "\n  ".join(details) if details else "")
 
 
+def access_token(settings):
+    from google.auth.transport.requests import Request
+
+    creds = credentials(settings)
+    creds.refresh(Request())
+    return creds.token
+
+
+def new_session():
+    import requests
+
+    return requests.Session()
+
+
+def _json(response):
+    try:
+        return response.json()
+    except ValueError:
+        return {"error": {"message": response.text[:300]}}
+
+
+def retrieve(session, token, request_id):
+    response = session.get(STATUS_ENDPOINT, params={"requestId": request_id}, headers={"Authorization": "Bearer " + token}, timeout=60)
+    return response.status_code, _json(response)
+
+
 def send(session, token, body):
     response = session.post(ENDPOINT, json=body, headers={"Authorization": "Bearer " + token}, timeout=60)
-    try:
-        payload = response.json()
-    except ValueError:
-        payload = {"error": {"message": response.text[:300]}}
-    return response.status_code, payload
+    return response.status_code, _json(response)
+
+
+# ---------------------------------------------------------------- results --
+
+
+def google_reason(reason):
+    """PROCESSING_ERROR_REASON_CLICK_NOT_FOUND -> CLICK_NOT_FOUND."""
+
+    return re.sub(r"^PROCESSING_(ERROR|WARNING)_(REASON_)?", "", reason or "UNSPECIFIED")
+
+
+def reason_text(reason):
+    key = google_reason(reason)
+    return REASON_HINTS.get(key) or key.lower().replace("_", " ")
+
+
+def summarize_status(payload):
+    """(status, problems, details) from Google's report on one request.
+
+    problems counts records that failed for a reason worth fixing; a resent
+    lead (duplicate transaction ID) is not one.
+    """
+
+    statuses, problems, details = [], 0, []
+    for item in payload.get("requestStatusPerDestination", []):
+        statuses.append(item.get("requestStatus", "REQUEST_STATUS_UNKNOWN"))
+        for key, counts, kind in (("errorInfo", "errorCounts", "not recorded"), ("warningInfo", "warningCounts", "warning")):
+            for count in (item.get(key) or {}).get(counts, []):
+                number = int(count.get("recordCount") or 0)
+                if kind == "not recorded" and google_reason(count.get("reason")) not in HARMLESS_REASONS:
+                    problems += number
+                details.append(f"{number} {kind}: {reason_text(count.get('reason'))}")
+    if not statuses:
+        status = "REQUEST_STATUS_UNKNOWN"
+    elif len(set(statuses)) == 1:
+        status = statuses[0]
+    else:
+        status = "PROCESSING" if "PROCESSING" in statuses else "PARTIAL_SUCCESS"
+    return status, problems, "; ".join(details)
+
+
+def read_log(path):
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="", encoding="utf-8-sig") as handle:
+        return [{column: row.get(column) or "" for column in LOG_COLUMNS} for row in csv.DictReader(handle)]
+
+
+def write_log(path, rows):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.DictWriter(handle, fieldnames=LOG_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def results(settings, log_path, *, now=None, session=None, token=None, log=print, show=40):
+    """Ask Google how it processed each logged send and update the log. Returns an exit code."""
+
+    rows = read_log(log_path)
+    if not rows:
+        log(f"Nothing sent yet ({log_path} does not exist). Send with: python ppc/export.py upload --send")
+        return 2
+    pending = [row for row in rows if row["request_id"] and row["status"] not in FINAL_STATUSES]
+    if pending:
+        token = token or access_token(settings)
+        session = session or new_session()
+        checked = (now or datetime.datetime.now(office_zone(settings))).isoformat(timespec="seconds")
+        for row in pending:
+            status, payload = retrieve(session, token, row["request_id"])
+            if status != 200:
+                write_log(log_path, rows)
+                log(explain_http(status, payload))
+                return 3 if status in (401, 403) else 1
+            row["status"], problems, row["details"] = summarize_status(payload)
+            row["problems"], row["checked_at"] = str(problems), checked
+        write_log(log_path, rows)
+
+    shown = rows[-show:]
+    log(f"What Google did with each upload ({log_path}{f', last {show} of {len(rows)}' if len(rows) > show else ''}):")
+    worst = 0
+    for row in shown:
+        words = STATUS_WORDS.get(row["status"], row["status"] or "no request ID, can't check")
+        details = f"  ({row['details']})" if row["details"] else ""
+        log(f"  {row['sent_at'][:16].replace('T', ' ')}  {row['action']:<28} {row['events']:>5} events  {words}{details}")
+        if int(row["problems"] or 0) or (row["status"] == "FAILED" and not row["details"]):
+            worst = 1
+    if any(row["status"] == "PROCESSING" for row in shown):
+        log("Some uploads are still processing. Run this again in a few minutes.")
+    return worst
 
 
 # -------------------------------------------------------------------- run --
@@ -281,9 +430,13 @@ def self_test_lead(client, customer_id, today):
             "not_qualified_reason": "", "profit": None}
 
 
-def run(settings, path=None, *, leads=None, send_for_real=False, done_message=None, now=None, client=None, session=None,
-        token=None, log=print):
-    """Validate (or send) every status in the lead-outcomes file. Returns an exit code."""
+def run(settings, path=None, *, leads=None, send_for_real=False, done_message=None, upload_log=None, now=None, client=None,
+        session=None, token=None, log=print):
+    """Validate (or send) every status in the lead-outcomes file. Returns an exit code.
+
+    Each real send is added to upload_log right away, so --results can check
+    it even if a later action fails.
+    """
 
     zone = office_zone(settings)
     now = now or datetime.datetime.now(zone)
@@ -307,16 +460,8 @@ def run(settings, path=None, *, leads=None, send_for_real=False, done_message=No
         client = api_source.build_client(settings)
     actions = conversion_actions(client, customer_id, set(events))
 
-    if token is None:
-        from google.auth.transport.requests import Request
-
-        creds = credentials(settings)
-        creds.refresh(Request())
-        token = creds.token
-    if session is None:
-        import requests
-
-        session = requests.Session()
+    token = token or access_token(settings)
+    session = session or new_session()
 
     mode = "Sending" if send_for_real else "Validating (nothing is recorded)"
     log(f"{mode}: {sum(len(v) for v in events.values())} status events for {len(leads)} leads")
@@ -342,9 +487,16 @@ def run(settings, path=None, *, leads=None, send_for_real=False, done_message=No
                 log(f"  {action}: {len(chunk)} events {'sent' if send_for_real else 'valid'}{note} (request {payload.get('requestId', '?')})")
                 for warning in warnings[:5]:
                     log(f"    warning: {warning}")
+                if send_for_real and upload_log:
+                    row = dict.fromkeys(LOG_COLUMNS, "")
+                    row.update(sent_at=now.isoformat(timespec="seconds"), action=action, events=str(len(chunk)),
+                               request_id=payload.get("requestId", ""))
+                    write_log(upload_log, read_log(upload_log) + [row])
             else:
                 log(f"  {action}: " + explain_http(status, payload))
                 return 3 if status in (401, 403) else 1
-    if not send_for_real and worst == 0:
+    if send_for_real:
+        log("Sent. In a few minutes, see what Google recorded with: python ppc/export.py upload --results")
+    elif worst == 0:
         log(done_message or "All valid. To record them in Google Ads, run the same command with --send.")
     return worst

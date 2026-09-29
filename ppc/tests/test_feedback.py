@@ -291,3 +291,91 @@ def test_test_and_send_together_are_refused(tmp_path):
     result = subprocess.run([sys.executable, os.path.join(here, "export.py"), "upload", "--test", "--send", "--config", str(tmp_path / "none.yaml")],
                             capture_output=True, text=True, env=env, timeout=60)
     assert result.returncode == 2 and "never records" in result.stdout
+
+
+# ------------------------------------------------ Google's processing report --
+
+
+def status_payload(status, errors=(), warnings=()):
+    item = {"requestStatus": status}
+    if errors:
+        item["errorInfo"] = {"errorCounts": [{"recordCount": str(n), "reason": "PROCESSING_ERROR_REASON_" + r} for r, n in errors]}
+    if warnings:
+        item["warningInfo"] = {"warningCounts": [{"recordCount": str(n), "reason": "PROCESSING_WARNING_REASON_" + r} for r, n in warnings]}
+    return {"requestStatusPerDestination": [item]}
+
+
+def test_processing_report_in_plain_words():
+    assert feedback.summarize_status(status_payload("SUCCESS")) == ("SUCCESS", 0, "")
+    status, problems, details = feedback.summarize_status(
+        status_payload("PARTIAL_SUCCESS", errors=[("CLICK_NOT_FOUND", 2), ("DUPLICATE_TRANSACTION_ID", 5)]))
+    assert (status, problems) == ("PARTIAL_SUCCESS", 2)
+    assert "2 not recorded: Google can't find the click" in details
+    assert "5 not recorded: already sent before, not counted twice" in details
+    assert feedback.summarize_status(status_payload("FAILED", errors=[("SOMETHING_NEW", 1)]))[2] == "1 not recorded: something new"
+    assert feedback.summarize_status({})[0] == "REQUEST_STATUS_UNKNOWN"
+
+
+class FakeStatusSession(FakeSession):
+    def __init__(self, reports, status=200):
+        super().__init__()
+        self.reports, self.get_status, self.gets = reports, status, []
+
+    def get(self, url, params, headers, timeout):
+        self.gets.append(params["requestId"])
+        return FakeResponse(self.get_status, self.reports.get(params["requestId"], {}))
+
+
+def test_sends_are_logged_then_results_are_read_back(monkeypatch, outcomes, api_settings, tmp_path):
+    fake_actions(monkeypatch)
+    log_path = str(tmp_path / "upload_log.csv")
+
+    feedback.run(api_settings, outcomes, now=NOW, client=object(), session=FakeSession(), token="t",
+                 upload_log=log_path, log=lambda *_: None)
+    assert not os.path.exists(log_path)  # validating never logs
+
+    lines = []
+    code = feedback.run(api_settings, outcomes, send_for_real=True, now=NOW, client=object(),
+                        session=FakeSession(payload={"requestId": "req-9"}), token="t", upload_log=log_path, log=lines.append)
+    assert code == 0 and any("upload --results" in line for line in lines)
+    logged = feedback.read_log(log_path)
+    assert len(logged) == 4 and {row["request_id"] for row in logged} == {"req-9"}
+    assert {row["action"] for row in logged} == {"offline_qualified_lead", "offline_appointment_set", "offline_poor_location",
+                                                  "offline_closed_deal"}
+
+    session = FakeStatusSession({"req-9": status_payload("PROCESSING")})
+    lines = []
+    assert feedback.results(api_settings, log_path, now=NOW, session=session, token="t", log=lines.append) == 0
+    assert len(session.gets) == 4 and any("still processing" in line for line in lines)
+
+    session = FakeStatusSession({"req-9": status_payload("PARTIAL_SUCCESS", errors=[("TOO_RECENT_CLICK", 1)])})
+    lines = []
+    assert feedback.results(api_settings, log_path, now=NOW, session=session, token="t", log=lines.append) == 1
+    assert any("some recorded" in line and "under 6 hours ago" in line for line in lines)
+
+    session = FakeStatusSession({})
+    feedback.results(api_settings, log_path, now=NOW, session=session, token="t", log=lambda *_: None)
+    assert session.gets == []  # finished requests are not asked about again
+
+
+def test_results_before_any_send_and_with_old_sign_in(api_settings, tmp_path):
+    lines = []
+    assert feedback.results(api_settings, str(tmp_path / "none.csv"), log=lines.append) == 2
+    assert "Nothing sent yet" in lines[0]
+
+    log_path = str(tmp_path / "upload_log.csv")
+    feedback.write_log(log_path, [dict(dict.fromkeys(feedback.LOG_COLUMNS, ""), sent_at="2026-09-29T10:00:00-07:00",
+                                       action="offline_qualified_lead", events="1", request_id="req-1")])
+    scope = {"error": {"message": "insufficient scopes", "details": [{"reason": "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}}
+    lines = []
+    code = feedback.results(api_settings, log_path, session=FakeStatusSession({"req-1": scope}, status=403), token="t", log=lines.append)
+    assert code == 3 and "refresh-token" in lines[-1]
+
+
+def test_results_and_send_together_are_refused(tmp_path):
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GOOGLE_ADS_")}
+    env.update(GOOGLE_ADS_CUSTOMER_ID="9897155298", GOOGLE_ADS_CLIENT_ID="id", GOOGLE_ADS_CLIENT_SECRET="s", GOOGLE_ADS_REFRESH_TOKEN="t")
+    result = subprocess.run([sys.executable, os.path.join(here, "export.py"), "upload", "--results", "--send", "--config",
+                             str(tmp_path / "none.yaml")], capture_output=True, text=True, env=env, timeout=60)
+    assert result.returncode == 2 and "only reads" in result.stdout

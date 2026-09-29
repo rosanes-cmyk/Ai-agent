@@ -316,8 +316,10 @@ One-time setup:
 1. Turn on the Data Manager API in the same Google Cloud project as your OAuth
    client: <https://console.cloud.google.com/apis/library/datamanager.googleapis.com>
 2. Run `python ppc/export.py refresh-token`. Sign in with the Google account
-   that runs THB's Google Ads, and allow both permissions (Google Ads, and Data
-   Manager). The new token is saved into `ppc/.env`.
+   that runs THB's Google Ads, and tick both permissions (Google Ads, and Data
+   Manager). The new token is saved into `ppc/.env`, and the command ends with
+   "Both permissions allowed". If a box was left unticked it says which one;
+   run it again.
 3. Check the whole path with `python ppc/export.py upload --test`. It takes one
    real click from the last few days, asks Google to validate a pretend
    "qualified lead" on it, and records nothing. "Self-test passed" means the
@@ -326,9 +328,17 @@ One-time setup:
 Each time:
 
 ```bash
-python ppc/export.py upload          # Google checks every row and records nothing
-python ppc/export.py upload --send   # records them in Google Ads
+python ppc/export.py upload            # Google checks every row and records nothing
+python ppc/export.py upload --send     # records them in Google Ads
+python ppc/export.py upload --results  # a few minutes later: what Google recorded, and why not
 ```
+
+Every `--send` is logged in `exports/upload_log.csv` (time, action, number of
+events, Google's request ID). `--results` asks Google how it processed each
+one and writes the answer back into that file, in plain words: "all recorded",
+"some recorded (2 not recorded: Google can't find the click...)", or "Google is
+still processing". "Already sent before, not counted twice" is not a problem;
+it is what re-sending the same file looks like.
 
 - A lead needs a click ID (`gclid`, `gbraid` or `wbraid`), an email or a phone
   number, or Google can't match it. Email and phone are normalised and SHA-256
