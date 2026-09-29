@@ -175,11 +175,19 @@ class Session:
             return False
         self.log("")
         self.log("  >>> " + instruction)
-        try:
-            answer = input("  >>> Press Enter when done (or type s + Enter to skip): ")
-        except EOFError:
-            return False
-        return answer.strip().lower() not in ("s", "skip")
+        while True:
+            try:
+                answer = input("  >>> Press Enter when done (or type s + Enter to skip): ").strip().lower()
+            except EOFError:
+                return False
+            if answer == "":
+                return True
+            if answer in ("s", "skip"):
+                return False
+            # Anything else is usually the next command, typed into the
+            # wrong window. Say so instead of treating it as "done".
+            self.log("  >>> This window is waiting for that step in the browser. Press Enter when it is")
+            self.log("  >>> done, or s to skip. To run another command, open a new Command Prompt.")
 
     def wait_for_download(self, instruction, timeout_s=None):
         """Wait for any download in any tab (used when the person clicks)."""

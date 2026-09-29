@@ -102,3 +102,35 @@ def test_import_of_ui_downloads(no_config, tmp_path):
 def test_options_work_after_the_command(no_config):
     result = run("status", *no_config, "--days", "7")
     assert "Default date range: 2026-09-" in result.stdout
+
+
+def test_pasted_env_file_next_to_config_is_used(tmp_path):
+    (tmp_path / ".env").write_bytes(
+        "﻿# pasted from the Google Ads setup\n"
+        "GOOGLE_ADS_CLIENT_ID=id-VALUE.apps.googleusercontent.com\n"
+        "set GOOGLE_ADS_CUSTOMER_ID=9897155298\n"
+        'GOOGLE_ADS_CLIENT_SECRET = "SECRET-VALUE"\n'
+        "GOOGLE_ADS_REFRESH_TOKEN=1//TOKEN-VALUE\n"
+        "GOOGLE_ADS_DEVELOPER_TOKEN=DEV-VALUE\n".encode("utf-8")
+    )
+    result = run("status", "--config", str(tmp_path / "config.yaml"))
+    assert result.returncode == 0, result.stdout
+    assert "(found)" in result.stdout and "9897155298" in result.stdout
+    assert "API export: ready" in result.stdout
+    for secret in ("SECRET-VALUE", "TOKEN-VALUE", "id-VALUE", "DEV-VALUE"):
+        assert secret not in result.stdout
+
+
+def test_real_environment_beats_the_env_file(tmp_path):
+    from ppc_exporter import settings as config
+
+    (tmp_path / ".env").write_text("GOOGLE_ADS_CUSTOMER_ID=1111111111\nGOOGLE_ADS_CLIENT_ID=from-file\n")
+    loaded = config.load(tmp_path / "config.yaml", environ={"GOOGLE_ADS_CUSTOMER_ID": "2222222222"})
+    assert loaded["customer_id"] == "2222222222"
+    assert loaded["api"]["client_id"] == "from-file"
+    assert loaded["env_found"] is True
+
+
+def test_missing_setup_message_mentions_the_env_file(no_config):
+    result = run("api", *no_config)
+    assert "ppc/.env" in result.stdout

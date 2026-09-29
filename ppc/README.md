@@ -28,8 +28,8 @@ exports/2026-09-28/
 exports/lead_outcomes.csv        your lead results, one row per lead (you fill this in)
 ```
 
-`exports/` and `ppc/config.yaml` are git-ignored: account data and credentials
-never get committed.
+`exports/`, `ppc/config.yaml` and `ppc/.env` are git-ignored: account data and
+credentials never get committed.
 
 ## Three ways to get the data
 
@@ -129,10 +129,23 @@ clicking, done once.
    account, and has Google validate all six queries without running them.
    Then run `python ppc/export.py api`.
 
-Environment variables override the file, using the client library's usual
-names: `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_JSON_KEY_FILE_PATH`,
+**Shortcut if you already have the values** as `GOOGLE_ADS_...=...` lines:
+paste them, as they are, into `ppc/.env` instead of editing `config.yaml`.
+On Windows run `notepad ppc\.env`, answer Yes to create the file, paste,
+save and close. For example:
+
+```
+GOOGLE_ADS_CUSTOMER_ID=1234567890
+GOOGLE_ADS_CLIENT_ID=....apps.googleusercontent.com
+GOOGLE_ADS_CLIENT_SECRET=...
+GOOGLE_ADS_REFRESH_TOKEN=...
+```
+
+Settings are read from `config.yaml`, then `ppc/.env`, then real environment
+variables, each overriding the one before. They use the client library's
+usual names: `GOOGLE_ADS_CUSTOMER_ID`, `GOOGLE_ADS_JSON_KEY_FILE_PATH`,
 `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN`
-and `GOOGLE_ADS_LOGIN_CUSTOMER_ID`.
+and `GOOGLE_ADS_LOGIN_CUSTOMER_ID`. `ppc/.env` is git-ignored.
 
 ### When Google refuses
 

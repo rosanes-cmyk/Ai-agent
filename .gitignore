@@ -1,6 +1,8 @@
 # PPC exporter: credentials, account data and exports stay on the machine
 # that made them. Never commit these.
 ppc/config.yaml
+.env
+*.env
 google-ads.yaml
 *-key.json
 *credentials*.json

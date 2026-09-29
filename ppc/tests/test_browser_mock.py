@@ -147,3 +147,21 @@ def test_chrome_lookup_honours_config(browser_settings):
     browser_settings["browser"]["chrome_path"] = ""
     found = browser_source.find_chrome(browser_settings)
     assert found == "" or os.path.exists(found) or shutil.which(found)
+
+
+def test_a_command_typed_into_the_prompt_is_not_taken_as_done(monkeypatch):
+    class Context:
+        pages = []
+
+        def on(self, *args):
+            pass
+
+    answers = iter(["python ppc\\export.py check", ""])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    lines = []
+    session = browser_source.Session(Context(), None, "https://ads.google.com", True, lines.append)
+    assert session.ask("Open the Search terms report.") is True
+    assert any("open a new Command Prompt" in line for line in lines)
+
+    answers = iter(["s"])
+    assert session.ask("Open the Search terms report.") is False

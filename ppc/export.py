@@ -260,7 +260,8 @@ def cmd_rebuild(settings, args, _start, _end):
 
 def cmd_status(settings, args, start, end):
     api = settings["api"]
-    log(f"Config file: {settings['config_path']} ({'found' if settings['config_found'] else 'NOT FOUND - copy config.example.yaml to config.yaml'})")
+    log(f"Config file: {settings['config_path']} ({'found' if settings['config_found'] else 'not found'})")
+    log(f"Pasted credentials file: {settings['env_path']} ({'found' if settings['env_found'] else 'not found'})")
     cid = config.digits(settings.get("customer_id"))
     log(f"customer_id: {cid if cid else 'missing'}")
     if api.get("json_key_file_path"):
@@ -396,6 +397,7 @@ def main(argv=None):
         log("The Google Ads API is not set up yet. Missing:")
         for item in problem.missing:
             log("  - " + item)
+        log("Already have the values as GOOGLE_ADS_...=... lines? Paste them into ppc/.env (notepad ppc\\.env on Windows).")
         log("Setup steps: ppc/README.md (section 'Google Ads API setup'). Check with: python ppc/export.py status")
         return EXIT_SETUP
     except api_source.ApiAccessError as problem:

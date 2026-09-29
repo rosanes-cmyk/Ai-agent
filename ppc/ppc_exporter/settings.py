@@ -1,4 +1,8 @@
-"""Settings from ppc/config.yaml, with environment variables taking priority.
+"""Settings from ppc/config.yaml, then ppc/.env, then real environment variables.
+
+Each later source wins over the one before it. ppc/.env takes lines in the
+KEY=VALUE form Google's own tools print (GOOGLE_ADS_CLIENT_ID=...), so a
+person can paste the values they already have without learning YAML.
 
 Nothing secret has a default and nothing secret is ever printed: status
 output shows whether a value is set, never the value.
@@ -68,14 +72,47 @@ def _merge(base, extra):
     return merged
 
 
+def _decode(raw):
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252")
+
+
+def read_env_file(path):
+    """KEY=VALUE pairs from a .env file. Tolerates what people paste:
+    blank lines, # comments, a leading "set " or "export ", spaces around
+    the =, and quotes around the value."""
+
+    pairs = {}
+    if not path.is_file():
+        return pairs
+    for line in _decode(path.read_bytes()).splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        for prefix in ("export ", "set "):
+            if line.lower().startswith(prefix):
+                line = line[len(prefix):].strip()
+        key, sep, value = line.partition("=")
+        if sep and key.strip():
+            pairs[key.strip()] = value.strip().strip('"').strip("'")
+    return pairs
+
+
 def load(config_path=None, environ=None):
     environ = os.environ if environ is None else environ
     path = Path(config_path) if config_path else DEFAULT_CONFIG
+    # The .env file sits next to whichever config file is in use.
+    env_path = path.parent / ".env"
+    pasted = read_env_file(env_path)
 
     data = {}
     if path.exists():
         try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            data = yaml.safe_load(path.read_text(encoding="utf-8-sig")) or {}
         except yaml.YAMLError as problem:
             raise SettingsError(f"{path} is not valid YAML: {problem}") from None
         if not isinstance(data, dict):
@@ -84,7 +121,7 @@ def load(config_path=None, environ=None):
     settings = _merge(copy.deepcopy(DEFAULTS), data)
 
     for variable, (section, key) in ENV_OVERRIDES.items():
-        value = environ.get(variable, "").strip()
+        value = environ.get(variable, "").strip() or pasted.get(variable, "").strip()
         if not value:
             continue
         if section:
@@ -99,6 +136,8 @@ def load(config_path=None, environ=None):
     settings["customer_id"] = str(settings.get("customer_id") or "").strip()
     settings["config_path"] = str(path)
     settings["config_found"] = path.exists()
+    settings["env_path"] = str(env_path)
+    settings["env_found"] = env_path.is_file()
     return settings
 
 
