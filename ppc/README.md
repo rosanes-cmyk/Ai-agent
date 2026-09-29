@@ -69,6 +69,9 @@ python ppc\export.py demo
 python ppc\export.py status
 ```
 
+In a new window you can skip activating `.venv`: if plain `python` lacks the
+packages, `export.py` runs itself again with the `.venv` Python.
+
 The browser mode uses your installed **Google Chrome**. If Chrome is not
 installed, run `python -m playwright install chromium` once.
 

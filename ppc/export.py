@@ -26,7 +26,14 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ppc_exporter import api_source, master, normalize, schema, values, settings as config  # noqa: E402
+from ppc_exporter import startup  # noqa: E402  (standard library only)
+
+try:
+    from ppc_exporter import api_source, master, normalize, schema, values, settings as config  # noqa: E402
+except ModuleNotFoundError as missing:
+    if __name__ != "__main__":
+        raise
+    sys.exit(startup.rerun_or_explain(missing, __file__, sys.argv[1:]))
 
 EXIT_OK, EXIT_PARTIAL, EXIT_SETUP, EXIT_ERROR = 0, 1, 2, 3
 
@@ -467,6 +474,9 @@ def main(argv=None):
     except KeyboardInterrupt:
         log("\nStopped.")
         return EXIT_ERROR
+    except ModuleNotFoundError as problem:
+        log(startup.explain(problem))
+        return EXIT_SETUP
     except Exception as problem:
         name = type(problem).__name__
         if name == "BrowserError":
