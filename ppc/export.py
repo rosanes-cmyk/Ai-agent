@@ -333,12 +333,26 @@ def cmd_upload(settings, args, _start, _end):
     missing = api_source.missing_settings(settings)
     if missing:
         raise api_source.ApiNotConfigured(missing)
-    path = os.path.expanduser(args.file) if args.file else str(config.output_root(settings, args.out) / master.OUTCOMES_FILE)
-    log(f"Lead results file: {path}")
+    outcomes = str(config.output_root(settings, args.out) / master.OUTCOMES_FILE)
     try:
+        if args.test:
+            if args.send:
+                log("--test never records anything; run it without --send.")
+                return EXIT_SETUP
+            client = api_source.build_client(settings)
+            lead = feedback.self_test_lead(client, config.digits(settings["customer_id"]), config.today(settings))
+            log(f"Self-test: a pretend qualified lead on your real click from {lead['lead_date']}. Google validates it and records nothing.")
+            done = ("Self-test passed: your sign-in can upload and Google accepted the format. Nothing was recorded.\n"
+                    f"Next: put your real leads in {outcomes}, then run: python ppc/export.py upload")
+            return feedback.run(settings, leads=[lead], client=client, done_message=done, log=log)
+        path = os.path.expanduser(args.file) if args.file else outcomes
+        log(f"Lead results file: {path}")
         return feedback.run(settings, path, send_for_real=args.send, log=log)
+    except feedback.FeedbackError as problem:
+        log(str(problem))
+        return EXIT_SETUP
     except Exception as problem:
-        if type(problem).__name__ == "RefreshError":
+        if type(problem).__name__ in ("RefreshError", "GoogleAdsException"):
             log(api_source.explain(problem, settings))
             return EXIT_SETUP
         raise
@@ -405,6 +419,7 @@ def parser():
     u = command("upload", "send lead statuses back to Google Ads (validates only, unless --send)")
     u.add_argument("--file", help="lead results CSV (default: exports/lead_outcomes.csv)")
     u.add_argument("--send", action="store_true", help="record the conversions in Google Ads (default: validate only)")
+    u.add_argument("--test", action="store_true", help="check the whole upload path with one real recent click; records nothing")
 
     c = command("open-chrome", "open a normal Chrome window for --attach")
     c.add_argument("--port", type=int, default=9222)

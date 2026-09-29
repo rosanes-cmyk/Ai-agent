@@ -315,6 +315,10 @@ One-time setup:
 2. Run `python ppc/export.py refresh-token`. Sign in with the Google account
    that runs THB's Google Ads, and allow both permissions (Google Ads, and Data
    Manager). The new token is saved into `ppc/.env`.
+3. Check the whole path with `python ppc/export.py upload --test`. It takes one
+   real click from the last few days, asks Google to validate a pretend
+   "qualified lead" on it, and records nothing. "Self-test passed" means the
+   sign-in, the Data Manager API and the conversion action all work.
 
 Each time:
 

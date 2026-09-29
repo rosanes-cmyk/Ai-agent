@@ -98,7 +98,7 @@ def _timestamp(lead_date, now, zone):
     """
 
     day = datetime.date.fromisoformat(lead_date)
-    end = datetime.datetime.combine(day, datetime.time(23, 59), tzinfo=zone)
+    end = datetime.datetime.combine(day, datetime.time(23, 59, 59), tzinfo=zone)
     latest = now - datetime.timedelta(minutes=1)
     return min(end, latest).isoformat(timespec="seconds")
 
@@ -251,12 +251,40 @@ def send(session, token, body):
 # -------------------------------------------------------------------- run --
 
 
-def run(settings, path, *, send_for_real=False, now=None, client=None, session=None, token=None, log=print):
+def sample_click(client, customer_id, today, days=14):
+    """(date, gclid) of the most recent click in the last `days` days, or None."""
+
+    from . import api_source
+
+    for back in range(1, days + 1):
+        day = (today - datetime.timedelta(days=back)).isoformat()
+        rows = api_source.stream(client, customer_id, f"SELECT click_view.gclid FROM click_view WHERE segments.date = '{day}' LIMIT 10")
+        for row in rows:
+            if row.click_view.gclid:
+                return day, row.click_view.gclid
+    return None
+
+
+def self_test_lead(client, customer_id, today):
+    """One pretend lead on a real recent click, marked qualified, for --test."""
+
+    found = sample_click(client, customer_id, today)
+    if found is None:
+        raise FeedbackError("No ad clicks in the last 14 days to test with.")
+    day, gclid = found
+    return {"lead_id": "SELF-TEST", "lead_date": day, "gclid": gclid, "gbraid": "", "wbraid": "", "email": "", "phone": "",
+            "qualified_lead": 1, "appointment": 0, "offer": 0, "contract": 0, "closed_deal": 0,
+            "not_qualified_reason": "", "profit": None}
+
+
+def run(settings, path=None, *, leads=None, send_for_real=False, done_message=None, now=None, client=None, session=None,
+        token=None, log=print):
     """Validate (or send) every status in the lead-outcomes file. Returns an exit code."""
 
     zone = office_zone(settings)
     now = now or datetime.datetime.now(zone)
-    leads = master.read_outcome_rows(path)
+    if leads is None:
+        leads = master.read_outcome_rows(path)
     if not leads:
         log(f"No leads in {path} yet. Add one row per lead (see ppc/README.md, Lead outcomes).")
         return 2
@@ -314,5 +342,5 @@ def run(settings, path, *, send_for_real=False, now=None, client=None, session=N
                 log(f"  {action}: " + explain_http(status, payload))
                 return 3 if status in (401, 403) else 1
     if not send_for_real and worst == 0:
-        log("All valid. To record them in Google Ads, run the same command with --send.")
+        log(done_message or "All valid. To record them in Google Ads, run the same command with --send.")
     return worst

@@ -45,7 +45,7 @@ def test_each_status_becomes_one_event_on_its_action():
     qualified = events["offline_qualified_lead"][0]
     assert qualified["adIdentifiers"] == {"gclid": "TEST-GCLID-abc"}
     assert qualified["transactionId"] == "L-1-offline_qualified_lead"
-    assert qualified["eventTimestamp"] == "2026-09-10T23:59:00-07:00"
+    assert qualified["eventTimestamp"] == "2026-09-10T23:59:59-07:00"
     assert qualified["eventSource"] == "WEB" and "conversionValue" not in qualified
     closed = events["offline_closed_deal"][0]
     assert closed["conversionValue"] == 31500.0 and closed["currency"] == "USD"
@@ -217,3 +217,37 @@ def test_upload_command_without_credentials_says_what_is_missing(tmp_path):
     result = subprocess.run([sys.executable, os.path.join(here, "export.py"), "upload", "--config", str(tmp_path / "none.yaml")],
                             capture_output=True, text=True, env=clean, timeout=60)
     assert result.returncode == 2 and "customer_id" in result.stdout
+
+
+def test_self_test_uses_a_real_recent_click_and_only_validates(monkeypatch, api_settings):
+    import types
+
+    today = datetime.date(2026, 9, 29)
+    seen = []
+
+    def fake_stream(client, cid, query):
+        seen.append(query)
+        if "2026-09-27" in query:
+            return [types.SimpleNamespace(click_view=types.SimpleNamespace(gclid="TEST-GCLID-recent"))]
+        return []
+
+    import ppc_exporter.api_source as api
+    monkeypatch.setattr(api, "stream", fake_stream)
+    lead_row = feedback.self_test_lead(object(), "9897155298", today)
+    assert lead_row["gclid"] == "TEST-GCLID-recent" and lead_row["lead_date"] == "2026-09-27" and lead_row["qualified_lead"] == 1
+    assert "2026-09-28" in seen[0]  # yesterday is tried first
+
+    fake_actions(monkeypatch)
+    session = FakeSession()
+    code = feedback.run(api_settings, leads=[lead_row], now=NOW, client=object(), session=session, token="t", log=lambda *_: None)
+    assert code == 0 and len(session.calls) == 1
+    assert session.calls[0][1]["validateOnly"] is True
+
+
+def test_test_and_send_together_are_refused(tmp_path):
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GOOGLE_ADS_")}
+    env.update(GOOGLE_ADS_CUSTOMER_ID="9897155298", GOOGLE_ADS_CLIENT_ID="id", GOOGLE_ADS_CLIENT_SECRET="s", GOOGLE_ADS_REFRESH_TOKEN="t")
+    result = subprocess.run([sys.executable, os.path.join(here, "export.py"), "upload", "--test", "--send", "--config", str(tmp_path / "none.yaml")],
+                            capture_output=True, text=True, env=env, timeout=60)
+    assert result.returncode == 2 and "never records" in result.stdout
