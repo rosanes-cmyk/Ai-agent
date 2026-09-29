@@ -31,7 +31,8 @@ def test_every_file_has_its_canonical_header(demo_bundle):
     expected["ppc_master_data.csv"] = schema.MASTER_COLUMNS
     expected["keyword_city_performance.csv"] = schema.KEYWORD_CITY_COLUMNS
     for name, columns in expected.items():
-        with open(out / name, newline="", encoding="utf-8") as handle:
+        assert (out / name).read_bytes().startswith(b"\xef\xbb\xbf"), f"{name} needs the BOM Excel reads"
+        with open(out / name, newline="", encoding="utf-8-sig") as handle:
             assert next(csv.reader(handle)) == columns, name
     assert (out / "data_dictionary.md").read_text().startswith("# PPC export data dictionary")
     assert json.loads((out / "manifest.json").read_text())["source"] == "demo"
@@ -112,7 +113,7 @@ def test_rows_without_spend_have_no_cost_per_lead(demo_bundle):
 def test_outcome_columns_blank_until_tracked(tmp_path):
     reports, _ = demo.reports(START, START)
     master.write_bundle(str(tmp_path), reports, start=START, end=START, source="demo", log=lambda *_: None)
-    with open(tmp_path / "keyword_city_performance.csv", newline="") as handle:
+    with open(tmp_path / "keyword_city_performance.csv", newline="", encoding="utf-8-sig") as handle:
         row = next(csv.DictReader(handle))
     assert all(row[c] == "" for c in schema.OUTCOMES + schema.FUNNEL_COSTS)
 
@@ -177,3 +178,13 @@ def test_outcomes_saved_by_excel_as_windows_1252(tmp_path):
     )
     leads, _ = master.load_outcomes(path, START, END)
     assert leads[0]["notes"] == "Seller\u2019s aunt called" and leads[0]["qualified_lead"] == 1
+
+
+def test_names_keep_their_dashes_and_lose_invisible_marks(tmp_path):
+    reports = {"locations": [{"campaign": "Sell My House Fast \u2013 Exact", "city": "Nabeul\u200e",
+                              "impressions": 1, "clicks": 1, "cost": 1.0}]}
+    master.write_bundle(str(tmp_path), reports, start=START, end=END, source="api", log=lambda *_: None)
+    row = read(tmp_path / "locations.csv")[0]
+    assert row["campaign"] == "Sell My House Fast \u2013 Exact"
+    assert row["city"] == "Nabeul"
+    assert "\u2013".encode("utf-8") in (tmp_path / "locations.csv").read_bytes()

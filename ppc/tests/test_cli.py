@@ -134,3 +134,11 @@ def test_real_environment_beats_the_env_file(tmp_path):
 def test_missing_setup_message_mentions_the_env_file(no_config):
     result = run("api", *no_config)
     assert "ppc/.env" in result.stdout
+
+
+def test_rebuild_keeps_every_total(no_config, tmp_path):
+    run("demo", *no_config)
+    folder = tmp_path / "exports" / "demo" / "2026-09-28"
+    before = json.loads((folder / "manifest.json").read_text())["totals"]
+    run("rebuild", str(folder), *no_config)
+    assert json.loads((folder / "manifest.json").read_text())["totals"] == before

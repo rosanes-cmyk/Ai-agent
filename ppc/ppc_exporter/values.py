@@ -97,7 +97,10 @@ def typed(column, text):
     """A cell read back from one of our own CSVs, as its proper type."""
 
     if column in schema.NUMERIC:
-        return parse_number(text)
+        number = parse_number(text)
+        if column in schema.INTEGER and number is not None and number.is_integer():
+            return int(number)
+        return number
     return "" if text is None else text
 
 
@@ -112,7 +115,9 @@ def write_csv(path, columns, rows, fractional=()):
     os.makedirs(directory, exist_ok=True)
     handle, temp = tempfile.mkstemp(dir=directory, suffix=".tmp")
     try:
-        with os.fdopen(handle, "w", newline="", encoding="utf-8") as out:
+        # utf-8-sig writes the byte-order mark Excel on Windows needs to read
+        # UTF-8; without it "Sell My House Fast – Exact" opens as "â€“".
+        with os.fdopen(handle, "w", newline="", encoding="utf-8-sig") as out:
             writer = csv.writer(out)
             writer.writerow(columns)
             for row in rows:

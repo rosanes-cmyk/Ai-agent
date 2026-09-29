@@ -49,6 +49,11 @@ def _sort_key(row):
     )
 
 
+# Zero-width and text-direction marks. Google's own location names carry
+# some ("Nabeul\u200e"); they are invisible but make equal names unequal.
+_INVISIBLE = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u200e\u200f\u2060\ufeff"))
+
+
 def finalize(report, rows):
     """Exactly the report's columns, ratios recomputed, in a stable order."""
 
@@ -60,8 +65,15 @@ def finalize(report, rows):
             value = row.get(column)
             if column in schema.NUMERIC:
                 clean[column] = values.parse_number(value) if isinstance(value, str) else value
+                # Money and (fractional, data-driven) conversions are kept to
+                # two decimals, as the CSV shows them, so every total
+                # (manifest, console, a rebuild, Excel's own SUM) is the same
+                # number. Impression-billed rows carry sub-cent costs that
+                # would otherwise make them differ by a few dollars a year.
+                if column in (schema.MONEY | schema.DECIMAL) and clean[column] is not None:
+                    clean[column] = round(clean[column], 2)
             else:
-                clean[column] = "" if value is None else str(value)
+                clean[column] = "" if value is None else str(value).translate(_INVISIBLE).strip()
         if "impressions" in clean:
             values.add_ratios(clean)
         clean_rows.append(clean)
