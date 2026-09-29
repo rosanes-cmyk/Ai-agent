@@ -491,12 +491,15 @@ def check(settings, start, end, log=print):
 
 
 def generate_refresh_token(client_id, client_secret):
-    """Open the browser for the one-time OAuth consent; return the refresh token.
+    """Open the browser for the one-time OAuth consent; return (refresh token, granted scopes).
 
     The person signs in themselves (password, MFA, any security prompts);
-    this only receives the token Google hands back on localhost.
+    this only receives the token Google hands back on localhost. Google lets
+    them untick a permission; oauthlib would then raise "Scope has changed",
+    so it is told to accept that and the caller checks what was granted.
     """
 
+    os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
     from google_auth_oauthlib.flow import InstalledAppFlow
 
     flow = InstalledAppFlow.from_client_config(
@@ -519,4 +522,7 @@ def generate_refresh_token(client_id, client_secret):
     )
     if not credentials.refresh_token:
         raise ApiAccessError("Google did not return a refresh token. Run the command again.")
-    return credentials.refresh_token
+    granted = credentials.granted_scopes
+    if isinstance(granted, str):
+        granted = granted.split()
+    return credentials.refresh_token, set(granted or (OAUTH_SCOPE, DATAMANAGER_SCOPE))

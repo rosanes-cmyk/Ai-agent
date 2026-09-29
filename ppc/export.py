@@ -324,13 +324,22 @@ def cmd_refresh_token(settings, args, _start, _end):
         return EXIT_SETUP
     log("A browser window opens. Sign in with the Google account that runs THB's Google Ads and allow both")
     log("permissions (Google Ads, and Data Manager for sending lead results back).")
-    token = api_source.generate_refresh_token(api["client_id"], api["client_secret"])
+    token, granted = api_source.generate_refresh_token(api["client_id"], api["client_secret"])
+    if api_source.OAUTH_SCOPE not in granted:
+        log("The Google Ads permission was not ticked, so nothing was saved. Run this again and tick both boxes.")
+        return EXIT_SETUP
+    uploads = api_source.DATAMANAGER_SCOPE in granted
     written = None if args.print_only else save_refresh_token(settings, token)
     if written:
-        log(f"Saved the new refresh token into {written}. Next: python ppc/export.py check")
-        return EXIT_OK
-    log("Refresh token (store it like a password; put it in ppc/.env as GOOGLE_ADS_REFRESH_TOKEN=...):")
-    log(token)
+        log(f"Saved the new refresh token into {written}.")
+    else:
+        log("Refresh token (store it like a password; put it in ppc/.env as GOOGLE_ADS_REFRESH_TOKEN=...):")
+        log(token)
+    if not uploads:
+        log("Reports will work, but the Data Manager box was not ticked, so uploads to Google will not.")
+        log("To send lead results back, run this again and tick both boxes.")
+        return EXIT_PARTIAL
+    log("Both permissions allowed. Next: python ppc/export.py upload --test")
     return EXIT_OK
 
 

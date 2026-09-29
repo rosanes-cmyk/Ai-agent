@@ -224,7 +224,11 @@ def explain_http(status, payload):
             "(it now asks for both permissions), then try again."
         )
     if "SERVICE_DISABLED" in reasons or "has not been used in project" in message or "is disabled" in message:
-        return f"The Data Manager API is off in your Google Cloud project. Turn it on: {ENABLE_API}"
+        # The project that matters is the one owning the OAuth client, which may not be the one open in the console.
+        project = re.search(r"project (\d+)", message)
+        where = f" (project {project.group(1)})" if project else ""
+        link = ENABLE_API + (f"?project={project.group(1)}" if project else "")
+        return f"The Data Manager API is off in the Google Cloud project your sign-in belongs to{where}. Turn it on: {link}"
     if status == 403:
         return (
             f"Google refused the upload ({message}). The Google account behind the token needs access "

@@ -190,7 +190,7 @@ def test_missing_upload_permission_says_how_to_fix(monkeypatch, outcomes, api_se
 def test_api_switched_off_says_where_to_turn_it_on():
     message = feedback.explain_http(403, {"error": {"message": "Data Manager API has not been used in project 1 before or it is disabled.",
                                                     "details": [{"reason": "SERVICE_DISABLED"}]}})
-    assert feedback.ENABLE_API in message
+    assert feedback.ENABLE_API + "?project=1" in message and "(project 1)" in message
 
 
 def test_refresh_token_is_saved_into_the_env_file(tmp_path):
@@ -209,6 +209,46 @@ def test_refresh_token_is_saved_into_the_env_file(tmp_path):
     settings = config.load(yaml_path, environ={})
     assert export.save_refresh_token(settings, "1//new") == str(yaml_path)
     assert 'refresh_token: "1//new"' in yaml_path.read_text()
+
+
+@pytest.mark.parametrize("granted, code, saved, says", [
+    ({"https://www.googleapis.com/auth/adwords", "https://www.googleapis.com/auth/datamanager"}, 0, True, "Both permissions allowed"),
+    ({"https://www.googleapis.com/auth/adwords"}, 1, True, "Data Manager box was not ticked"),
+    ({"https://www.googleapis.com/auth/datamanager"}, 2, False, "Google Ads permission was not ticked"),
+])
+def test_refresh_token_reports_an_unticked_permission(tmp_path, monkeypatch, capsys, granted, code, saved, says):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import export
+
+    env = tmp_path / ".env"
+    env.write_text("GOOGLE_ADS_CLIENT_ID=abc\nGOOGLE_ADS_CLIENT_SECRET=s\nGOOGLE_ADS_REFRESH_TOKEN=1//old\n")
+    monkeypatch.setattr(export.api_source, "generate_refresh_token", lambda *_: ("1//new", granted))
+    for name in [k for k in os.environ if k.startswith("GOOGLE_ADS_")]:
+        monkeypatch.delenv(name)
+    assert export.main(["refresh-token", "--config", str(tmp_path / "config.yaml")]) == code
+    assert says in capsys.readouterr().out
+    assert ("1//new" in env.read_text()) is saved
+
+
+def test_refresh_token_accepts_a_partial_grant_from_google(monkeypatch):
+    """oauthlib raises "Scope has changed" on a partial grant unless told to relax."""
+
+    import types
+    import google_auth_oauthlib.flow as flow_module
+    from ppc_exporter import api_source
+
+    class FakeFlow:
+        @classmethod
+        def from_client_config(cls, config_, scopes):
+            return cls()
+
+        def run_local_server(self, **_kw):
+            assert os.environ.get("OAUTHLIB_RELAX_TOKEN_SCOPE") == "1"
+            return types.SimpleNamespace(refresh_token="1//x", granted_scopes=["https://www.googleapis.com/auth/adwords"])
+
+    monkeypatch.delenv("OAUTHLIB_RELAX_TOKEN_SCOPE", raising=False)
+    monkeypatch.setattr(flow_module, "InstalledAppFlow", FakeFlow)
+    assert api_source.generate_refresh_token("id", "secret") == ("1//x", {"https://www.googleapis.com/auth/adwords"})
 
 
 def test_upload_command_without_credentials_says_what_is_missing(tmp_path):
