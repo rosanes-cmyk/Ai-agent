@@ -269,11 +269,12 @@ def _sign_in(monkeypatch, answer_path):
     port = probe.getsockname()[1]
     probe.close()
 
-    out, lines = {}, []
+    out, lines, opened = {}, [], []
 
     def run():
         try:
-            out["result"] = api_source.generate_refresh_token("id", "secret", port=port, say=lines.append, open_browser=False)
+            out["result"] = api_source.generate_refresh_token("id", "secret", port=port, say=lines.append,
+                                                              open_link=lambda url: opened.append(url) or "Chrome")
         except Exception as problem:  # handed to the test thread
             out["error"] = problem
 
@@ -294,6 +295,7 @@ def _sign_in(monkeypatch, answer_path):
     replies = [get("/start"), get("/favicon.ico"), get(answer_path)]
     worker.join(15)
     assert not worker.is_alive()
+    assert opened == [f"http://127.0.0.1:{port}/start"]
     return port, seen, out, lines, replies
 
 
@@ -309,6 +311,48 @@ def test_sign_in_uses_a_short_start_link_then_takes_googles_answer(monkeypatch):
     assert seen["auth_kw"] == {"access_type": "offline", "prompt": "consent"}
     assert seen["response"] == f"https://127.0.0.1:{port}/?state=st&code=4%2Fabc&scope=x"
     assert any(line.strip() == f"http://127.0.0.1:{port}/start" for line in lines)
+    assert any(line.startswith("Opened the sign-in in Chrome") for line in lines)
+    assert not any("Ctrl+C" in line for line in lines)  # pressing it to copy the link stopped the sign-in
+
+
+def test_sign_in_opens_chrome_where_the_google_account_is(monkeypatch, tmp_path):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import subprocess as sp
+    import webbrowser
+
+    import export
+    from ppc_exporter import browser_source
+
+    started, defaulted = [], []
+    monkeypatch.setattr(sp, "Popen", lambda args, **_k: started.append(args))
+    monkeypatch.setattr(webbrowser, "open", lambda url, new=0: defaulted.append(url) or True)
+    settings = config.load(tmp_path / "none.yaml", environ={})
+
+    monkeypatch.setattr(browser_source, "find_chrome", lambda _s: r"C:\Chrome\chrome.exe")
+    assert export.open_sign_in("http://127.0.0.1:8723/start", settings) == "Chrome"
+    assert started == [[r"C:\Chrome\chrome.exe", "http://127.0.0.1:8723/start"]] and defaulted == []
+
+    monkeypatch.setattr(browser_source, "find_chrome", lambda _s: "")
+    assert export.open_sign_in("http://127.0.0.1:8723/start", settings) == "your default browser"
+    assert defaulted == ["http://127.0.0.1:8723/start"]
+
+
+def test_ctrl_c_during_sign_in_says_how_to_redo_it(tmp_path, monkeypatch, capsys):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import export
+
+    (tmp_path / ".env").write_text("GOOGLE_ADS_CLIENT_ID=4242-abc\nGOOGLE_ADS_CLIENT_SECRET=s\n")
+    for name in [k for k in os.environ if k.startswith("GOOGLE_ADS_")]:
+        monkeypatch.delenv(name)
+    monkeypatch.setattr(export.api_source, "port_in_use", lambda *_: False)
+    monkeypatch.setattr(export.api_source, "redirect_problem", lambda *_: None)
+
+    def interrupted(*_a, **_k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(export.api_source, "generate_refresh_token", interrupted)
+    assert export.main(["refresh-token", "--config", str(tmp_path / "config.yaml")]) == export.EXIT_ERROR
+    assert "leave this" in capsys.readouterr().out
 
 
 def test_sign_in_refused_in_the_browser_says_so(monkeypatch):

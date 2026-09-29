@@ -568,7 +568,7 @@ def redirect_problem(client_id, uri, session=None):
     return None
 
 
-def generate_refresh_token(client_id, client_secret, port=REDIRECT_PORT, say=print, open_browser=True):
+def generate_refresh_token(client_id, client_secret, port=REDIRECT_PORT, say=print, open_link=None):
     """Run the one-time OAuth consent; return (refresh token, granted scopes).
 
     The person signs in themselves (password, MFA, any security prompts), in
@@ -578,10 +578,11 @@ def generate_refresh_token(client_id, client_secret, port=REDIRECT_PORT, say=pri
     then sends its answer back to http://127.0.0.1:8723. Google lets them
     untick a permission; oauthlib would then raise "Scope has changed", so it
     is told to accept that and the caller checks what was granted.
+    open_link(url) opens the short link and returns the browser's name, or
+    None when nothing opened.
     """
 
     os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
-    import webbrowser
     import wsgiref.simple_server
 
     from google_auth_oauthlib.flow import InstalledAppFlow
@@ -627,12 +628,12 @@ def generate_refresh_token(client_id, client_secret, port=REDIRECT_PORT, say=pri
     server = wsgiref.simple_server.make_server(REDIRECT_HOST, port, app, server_class=Server, handler_class=Quiet)
     start = f"{redirect_uri(port)}/start"
     try:
-        say("A browser may open by itself. If it is not the one you use for Google Ads, paste this")
-        say("short link into that browser instead (either works, only one is needed):")
+        opened = open_link(start) if open_link else None
+        if opened:
+            say(f"Opened the sign-in in {opened}. Leave this window alone while you sign in; it finishes by itself.")
+        say("If no sign-in tab appeared, type this into your browser's address bar (not here in cmd):")
         say(f"\n    {start}\n")
-        say("Waiting for Google... (Ctrl+C stops)")
-        if open_browser:
-            webbrowser.open(start, new=1)
+        say("Waiting for Google... (to cancel, close this window)")
         while "query" not in answer:
             server.handle_request()
     finally:

@@ -317,11 +317,34 @@ def save_refresh_token(settings, token):
     return None
 
 
+def open_sign_in(url, settings):
+    """Open the sign-in in Chrome, where people use Google Ads, else the default browser.
+
+    Returns the browser's name, or None when nothing opened. Windows PCs often
+    default to Edge while the Google account is signed in to Chrome.
+    """
+
+    import subprocess
+    import webbrowser
+
+    from ppc_exporter import browser_source
+
+    chrome = browser_source.find_chrome(settings)
+    if chrome:
+        try:
+            subprocess.Popen([chrome, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return "Chrome"
+        except OSError:
+            pass
+    return "your default browser" if webbrowser.open(url, new=1) else None
+
+
 def cmd_refresh_token(settings, args, _start, _end):
     api = settings["api"]
     if not (api.get("client_id") and api.get("client_secret")):
         log("Put your OAuth client_id and client_secret in ppc/.env or ppc/config.yaml first (see README, OAuth option).")
         return EXIT_SETUP
+    log("Checking with Google that the sign-in can come back to this computer...")
     if api_source.port_in_use(args.port):
         spare = api_source.free_port_after(args.port)
         log(f"Port {args.port} on this computer is already used by another program (another local server,")
@@ -350,7 +373,12 @@ def cmd_refresh_token(settings, args, _start, _end):
     log("Sign in with the Google account that runs THB's Google Ads and tick both permissions")
     log("(Google Ads, and Data Manager for sending lead results back).")
     try:
-        token, granted = api_source.generate_refresh_token(api["client_id"], api["client_secret"], port=args.port, say=log)
+        token, granted = api_source.generate_refresh_token(api["client_id"], api["client_secret"], port=args.port, say=log,
+                                                           open_link=lambda url: open_sign_in(url, settings))
+    except KeyboardInterrupt:
+        log("\nSign-in cancelled (Ctrl+C in this window stops it). Run the command again and leave this")
+        log("window alone while you sign in in the browser; it finishes by itself.")
+        return EXIT_ERROR
     except OSError as busy:
         spare = api_source.free_port_after(args.port)
         log(f"Port {args.port} could not be opened on this computer ({busy.strerror or busy}). Use another:")
