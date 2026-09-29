@@ -335,7 +335,9 @@ def cmd_refresh_token(settings, args, _start, _end):
         log(f"{uri} as an allowed return address. One-time fix, about a minute:")
         log(f"  1. Open {api_source.client_page(api['client_id'])}")
         log("     (with a Google account that can edit that Google Cloud project)")
-        log(f"  2. Under 'Authorized redirect URIs' click 'Add URI' and enter exactly:  {uri}")
+        log("  2. In the 'Authorized redirect URIs' box (not 'Authorized JavaScript origins'), click 'Add URI'")
+        log("     and type this into the new field. It is text for that field, not a page to open:")
+        log(f"       {uri}")
         log("  3. Click Save, wait 5 minutes, then run this command again.")
         return EXIT_SETUP
     if problem in ("deleted_client", "invalid_client"):

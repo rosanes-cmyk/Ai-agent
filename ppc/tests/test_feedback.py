@@ -308,7 +308,7 @@ def test_refresh_token_explains_an_unregistered_return_address(tmp_path, monkeyp
     monkeypatch.setattr(export.api_source, "generate_refresh_token", lambda *_a, **_k: pytest.fail("browser must not open"))
     assert export.main(["refresh-token", "--config", str(tmp_path / "config.yaml")]) == export.EXIT_SETUP
     out = capsys.readouterr().out
-    assert "enter exactly:  http://127.0.0.1:8723" in out
+    assert "'Authorized redirect URIs' box" in out and "       http://127.0.0.1:8723\n" in out
     assert "auth/clients/4242-abc.apps.googleusercontent.com?project=4242" in out
 
 
