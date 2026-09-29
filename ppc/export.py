@@ -322,6 +322,12 @@ def cmd_refresh_token(settings, args, _start, _end):
     if not (api.get("client_id") and api.get("client_secret")):
         log("Put your OAuth client_id and client_secret in ppc/.env or ppc/config.yaml first (see README, OAuth option).")
         return EXIT_SETUP
+    if api_source.port_in_use(args.port):
+        spare = api_source.free_port_after(args.port)
+        log(f"Port {args.port} on this computer is already used by another program (another local server,")
+        log("for example the Call Coach; leave it running). The sign-in needs a free one:")
+        log(f"  python ppc/export.py refresh-token --port {spare}" if spare else "  python ppc/export.py refresh-token --port <a free port>")
+        return EXIT_SETUP
     uri = api_source.redirect_uri(args.port)
     problem = api_source.redirect_problem(api["client_id"], uri)
     if problem == "redirect_uri_mismatch":
@@ -344,9 +350,9 @@ def cmd_refresh_token(settings, args, _start, _end):
     try:
         token, granted = api_source.generate_refresh_token(api["client_id"], api["client_secret"], port=args.port)
     except OSError as busy:
-        log(f"Port {args.port} is already in use on this computer ({busy.strerror or busy}). Close the program using it,")
-        log(f"or run: python ppc/export.py refresh-token --port {args.port + 1}  (then add {api_source.redirect_uri(args.port + 1)}")
-        log("to the OAuth client's Authorized redirect URIs too).")
+        spare = api_source.free_port_after(args.port)
+        log(f"Port {args.port} could not be opened on this computer ({busy.strerror or busy}). Use another:")
+        log(f"  python ppc/export.py refresh-token --port {spare}" if spare else "  python ppc/export.py refresh-token --port <a free port>")
         return EXIT_SETUP
     if api_source.OAUTH_SCOPE not in granted:
         log("The Google Ads permission was not ticked, so nothing was saved. Run this again and tick both boxes.")
@@ -460,7 +466,7 @@ def parser():
 
     t = command("refresh-token", "one-time Google sign-in to create an OAuth refresh token")
     t.add_argument("--print-only", action="store_true", help="print the token instead of saving it")
-    t.add_argument("--port", type=int, default=api_source.REDIRECT_PORT, help="local port Google returns the sign-in to (default 8080)")
+    t.add_argument("--port", type=int, default=api_source.REDIRECT_PORT, help="local port Google returns the sign-in to (default 8723)")
 
     u = command("upload", "send lead statuses back to Google Ads (validates only, unless --send)")
     u.add_argument("--file", help="lead results CSV (default: exports/lead_outcomes.csv)")

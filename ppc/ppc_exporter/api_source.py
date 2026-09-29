@@ -23,9 +23,9 @@ OAUTH_SCOPE = "https://www.googleapis.com/auth/adwords"
 DATAMANAGER_SCOPE = "https://www.googleapis.com/auth/datamanager"
 # refresh-token receives Google's answer here. Desktop-app OAuth clients accept
 # any local address; a Web-application client must list this exact one
-# (no trailing slash) under Authorized redirect URIs. It is the address
-# Google's own Google Ads sign-in example uses.
-REDIRECT_HOST, REDIRECT_PORT = "127.0.0.1", 8080
+# (no trailing slash) under Authorized redirect URIs. Not 8080: local servers
+# such as THB's Call Coach on the office PC already use it.
+REDIRECT_HOST, REDIRECT_PORT = "127.0.0.1", 8723
 AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
 
 
@@ -503,6 +503,37 @@ def redirect_uri(port=REDIRECT_PORT):
     return f"http://{REDIRECT_HOST}:{port}"
 
 
+def port_in_use(port, host=REDIRECT_HOST):
+    """True when another program already listens on host:port.
+
+    Connects first: Windows lets a second server bind a port that another
+    one listens on, and the browser then lands on the wrong program.
+    Refused (nobody listening) takes about 2 seconds on Windows.
+    """
+
+    import socket
+
+    try:
+        with socket.create_connection((host, port), timeout=3):
+            return True
+    except OSError:
+        pass
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        probe.bind((host, port))
+        return False
+    except OSError:
+        return True
+    finally:
+        probe.close()
+
+
+def free_port_after(port, tries=30):
+    return next((p for p in range(port + 1, port + 1 + tries) if not port_in_use(p)), None)
+
+
 def client_page(client_id):
     """Cloud console page of this OAuth client. Its ID starts with the owning project's number."""
 
@@ -547,7 +578,12 @@ def generate_refresh_token(client_id, client_secret, port=REDIRECT_PORT):
     """
 
     os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
+    import wsgiref.simple_server
+
     from google_auth_oauthlib.flow import InstalledAppFlow
+
+    # Never share the port with another program (SO_REUSEADDR allows that on Windows).
+    wsgiref.simple_server.WSGIServer.allow_reuse_address = False
 
     flow = InstalledAppFlow.from_client_config(
         {

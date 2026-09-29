@@ -222,6 +222,7 @@ def test_refresh_token_reports_an_unticked_permission(tmp_path, monkeypatch, cap
 
     env = tmp_path / ".env"
     env.write_text("GOOGLE_ADS_CLIENT_ID=abc\nGOOGLE_ADS_CLIENT_SECRET=s\nGOOGLE_ADS_REFRESH_TOKEN=1//old\n")
+    monkeypatch.setattr(export.api_source, "port_in_use", lambda *_: False)
     monkeypatch.setattr(export.api_source, "redirect_problem", lambda *_: None)
     monkeypatch.setattr(export.api_source, "generate_refresh_token", lambda *_a, **_k: ("1//new", granted))
     for name in [k for k in os.environ if k.startswith("GOOGLE_ADS_")]:
@@ -245,8 +246,10 @@ def test_refresh_token_accepts_a_partial_grant_from_google(monkeypatch):
 
         def run_local_server(self, **kw):
             assert os.environ.get("OAUTHLIB_RELAX_TOKEN_SCOPE") == "1"
-            # Exactly http://127.0.0.1:8080, the address a Web-application client must list.
-            assert (kw["host"], kw["port"], kw["redirect_uri_trailing_slash"]) == ("127.0.0.1", 8080, False)
+            # Exactly http://127.0.0.1:8723, the address a Web-application client must list.
+            assert (kw["host"], kw["port"], kw["redirect_uri_trailing_slash"]) == ("127.0.0.1", 8723, False)
+            import wsgiref.simple_server
+            assert wsgiref.simple_server.WSGIServer.allow_reuse_address is False
             return types.SimpleNamespace(refresh_token="1//x", granted_scopes=["https://www.googleapis.com/auth/adwords"])
 
     monkeypatch.delenv("OAUTHLIB_RELAX_TOKEN_SCOPE", raising=False)
@@ -278,17 +281,17 @@ def test_redirect_problem_reads_googles_answer():
     from ppc_exporter import api_source
 
     session = FakeAuthSession(google_error_page("redirect_uri_mismatch"))
-    assert api_source.redirect_problem("123-abc.apps.googleusercontent.com", "http://127.0.0.1:8080", session) == "redirect_uri_mismatch"
-    assert "redirect_uri=http%3A%2F%2F127.0.0.1%3A8080" in session.urls[0]
+    assert api_source.redirect_problem("123-abc.apps.googleusercontent.com", "http://127.0.0.1:8723", session) == "redirect_uri_mismatch"
+    assert "redirect_uri=http%3A%2F%2F127.0.0.1%3A8723" in session.urls[0]
     fine = FakeAuthSession("https://accounts.google.com/v3/signin/identifier?x=1")
-    assert api_source.redirect_problem("123-abc", "http://127.0.0.1:8080", fine) is None
-    assert api_source.redirect_problem("123-abc", "http://127.0.0.1:8080", FakeAuthSession(google_error_page("something_new"))) is None
+    assert api_source.redirect_problem("123-abc", "http://127.0.0.1:8723", fine) is None
+    assert api_source.redirect_problem("123-abc", "http://127.0.0.1:8723", FakeAuthSession(google_error_page("something_new"))) is None
 
     class Offline:
         def get(self, *_a, **_k):
             raise OSError("no network")
 
-    assert api_source.redirect_problem("123-abc", "http://127.0.0.1:8080", Offline()) is None
+    assert api_source.redirect_problem("123-abc", "http://127.0.0.1:8723", Offline()) is None
     assert api_source.client_page("9876-abc.apps.googleusercontent.com") == \
         "https://console.cloud.google.com/auth/clients/9876-abc.apps.googleusercontent.com?project=9876"
 
@@ -300,29 +303,56 @@ def test_refresh_token_explains_an_unregistered_return_address(tmp_path, monkeyp
     (tmp_path / ".env").write_text("GOOGLE_ADS_CLIENT_ID=4242-abc.apps.googleusercontent.com\nGOOGLE_ADS_CLIENT_SECRET=s\n")
     for name in [k for k in os.environ if k.startswith("GOOGLE_ADS_")]:
         monkeypatch.delenv(name)
+    monkeypatch.setattr(export.api_source, "port_in_use", lambda *_: False)
     monkeypatch.setattr(export.api_source, "redirect_problem", lambda *_: "redirect_uri_mismatch")
     monkeypatch.setattr(export.api_source, "generate_refresh_token", lambda *_a, **_k: pytest.fail("browser must not open"))
     assert export.main(["refresh-token", "--config", str(tmp_path / "config.yaml")]) == export.EXIT_SETUP
     out = capsys.readouterr().out
-    assert "enter exactly:  http://127.0.0.1:8080" in out
+    assert "enter exactly:  http://127.0.0.1:8723" in out
     assert "auth/clients/4242-abc.apps.googleusercontent.com?project=4242" in out
 
 
-def test_refresh_token_on_a_busy_port_suggests_another(tmp_path, monkeypatch, capsys):
+def test_refresh_token_never_uses_a_port_another_program_listens_on(tmp_path, monkeypatch, capsys):
+    """The office PC runs the Call Coach on 8080; the browser must not land there."""
+
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     import export
 
     (tmp_path / ".env").write_text("GOOGLE_ADS_CLIENT_ID=4242-abc\nGOOGLE_ADS_CLIENT_SECRET=s\n")
     for name in [k for k in os.environ if k.startswith("GOOGLE_ADS_")]:
         monkeypatch.delenv(name)
-    monkeypatch.setattr(export.api_source, "redirect_problem", lambda *_: None)
-
-    def busy(*_a, **_k):
-        raise OSError(98, "Address already in use")
-
-    monkeypatch.setattr(export.api_source, "generate_refresh_token", busy)
+    monkeypatch.setattr(export.api_source, "port_in_use", lambda port, *_: port == 8723)
+    monkeypatch.setattr(export.api_source, "redirect_problem", lambda *_: pytest.fail("checked before the port"))
+    monkeypatch.setattr(export.api_source, "generate_refresh_token", lambda *_a, **_k: pytest.fail("browser must not open"))
     assert export.main(["refresh-token", "--config", str(tmp_path / "config.yaml")]) == export.EXIT_SETUP
-    assert "refresh-token --port 8081" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Port 8723" in out and "refresh-token --port 8724" in out
+
+    def cannot_open(*_a, **_k):
+        raise OSError(10013, "An attempt was made to access a socket in a way forbidden by its access permissions")
+
+    monkeypatch.setattr(export.api_source, "port_in_use", lambda *_: False)
+    monkeypatch.setattr(export.api_source, "free_port_after", lambda port: port + 3)
+    monkeypatch.setattr(export.api_source, "redirect_problem", lambda *_: None)
+    monkeypatch.setattr(export.api_source, "generate_refresh_token", cannot_open)
+    assert export.main(["refresh-token", "--config", str(tmp_path / "config.yaml")]) == export.EXIT_SETUP
+    assert "refresh-token --port 8726" in capsys.readouterr().out
+
+
+def test_port_in_use_sees_a_listening_program():
+    import socket
+
+    from ppc_exporter import api_source
+
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    try:
+        assert api_source.port_in_use(port) is True
+    finally:
+        server.close()
+    assert api_source.port_in_use(port) is False
 
 
 def test_upload_command_without_credentials_says_what_is_missing(tmp_path):
