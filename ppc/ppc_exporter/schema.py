@@ -141,6 +141,9 @@ OUTCOME_FLAGS = {
     "closed_deal": "closed_deals",
 }
 
+# gclid / gbraid / wbraid, email and phone are what let a lead's statuses be
+# sent back to Google (ppc/ppc_exporter/feedback.py). Email and phone are
+# hashed before they leave the computer and never go into the master file.
 LEAD_OUTCOME_COLUMNS = [
     "lead_date",
     "lead_id",
@@ -150,11 +153,16 @@ LEAD_OUTCOME_COLUMNS = [
     "search_term",
     "city",
     "gclid",
+    "gbraid",
+    "wbraid",
+    "email",
+    "phone",
     "qualified_lead",
     "appointment",
     "offer",
     "contract",
     "closed_deal",
+    "not_qualified_reason",
     "profit",
     "notes",
 ]

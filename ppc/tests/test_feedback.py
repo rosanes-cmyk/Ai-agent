@@ -1,0 +1,219 @@
+"""Sending lead outcomes back to Google through the Data Manager API.
+
+No network: a fake HTTP session records what would be posted, so the
+request shape, the validate-only default and the error explanations are
+all checked exactly as they would go out.
+"""
+
+import datetime
+import os
+import subprocess
+import sys
+import zoneinfo
+
+import pytest
+
+from ppc_exporter import feedback, settings as config
+
+LA = zoneinfo.ZoneInfo("America/Los_Angeles")
+NOW = datetime.datetime(2026, 9, 29, 10, 0, tzinfo=LA)
+
+
+def lead(**fields):
+    base = {"lead_id": "L-1", "lead_date": "2026-09-10", "gclid": "", "gbraid": "", "wbraid": "", "email": "", "phone": "",
+            "qualified_lead": 0, "appointment": 0, "offer": 0, "contract": 0, "closed_deal": 0,
+            "not_qualified_reason": "", "profit": None}
+    base.update(fields)
+    return base
+
+
+def test_identifiers_are_normalised_then_hashed():
+    assert feedback.normalize_email("  Test@Example.COM ") == "test@example.com"
+    assert feedback.sha256("test@example.com") == "973dfe463ec85785f5f95af5ba3906eedb2d931c24e69824a89ea65dba4e813b"
+    assert feedback.normalize_email("not-an-email") is None
+    assert feedback.normalize_phone("(510) 555-1234") == "+15105551234"
+    assert feedback.normalize_phone("1-510-555-1234") == "+15105551234"
+    assert feedback.normalize_phone("+44 20 7946 0958") == "+442079460958"
+    assert feedback.normalize_phone("555-1234") is None
+
+
+def test_each_status_becomes_one_event_on_its_action():
+    events, skipped = feedback.build_events(
+        [lead(gclid="TEST-GCLID-abc", qualified_lead=1, appointment=1, closed_deal=1, profit=31500.0)], NOW, LA)
+    assert skipped == []
+    assert set(events) == {"offline_qualified_lead", "offline_appointment_set", "offline_closed_deal"}
+    qualified = events["offline_qualified_lead"][0]
+    assert qualified["adIdentifiers"] == {"gclid": "TEST-GCLID-abc"}
+    assert qualified["transactionId"] == "L-1-offline_qualified_lead"
+    assert qualified["eventTimestamp"] == "2026-09-10T23:59:00-07:00"
+    assert qualified["eventSource"] == "WEB" and "conversionValue" not in qualified
+    closed = events["offline_closed_deal"][0]
+    assert closed["conversionValue"] == 31500.0 and closed["currency"] == "USD"
+
+
+def test_contact_details_are_sent_hashed_never_raw():
+    events, _ = feedback.build_events([lead(email="Seller@Gmail.com", phone="510-555-1234", qualified_lead=1)], NOW, LA)
+    event = events["offline_qualified_lead"][0]
+    ids = event["userData"]["userIdentifiers"]
+    assert {"emailAddress": feedback.sha256("seller@gmail.com")} in ids
+    assert {"phoneNumber": feedback.sha256("+15105551234")} in ids
+    assert "Seller@Gmail.com" not in repr(event) and "555-1234" not in repr(event)
+    assert event["eventSource"] == "OTHER"  # no click ID: matched by contact details only
+    assert feedback.request_body({"d": 1}, [event], True)["encoding"] == "HEX"
+
+
+def test_reasons_map_to_the_disqualification_actions():
+    events, skipped = feedback.build_events([
+        lead(lead_id="A", gclid="g1", not_qualified_reason="Outside buy area"),
+        lead(lead_id="B", gclid="g2", not_qualified_reason="Fraud/Spam"),
+        lead(lead_id="C", gclid="g3", not_qualified_reason="Price shopping"),
+        lead(lead_id="D", gclid="g4", not_qualified_reason="Moon landing"),
+    ], NOW, LA)
+    assert [e["transactionId"] for e in events["offline_poor_location"]] == ["A-offline_poor_location"]
+    assert [e["transactionId"] for e in events["offline_fraud"]] == ["B-offline_fraud"]
+    assert [e["transactionId"] for e in events["offline_retail"]] == ["C-offline_retail"]
+    assert ("D", "unknown not_qualified_reason 'Moon landing'") in skipped
+
+
+def test_leads_google_cannot_use_are_skipped_with_a_reason():
+    _, skipped = feedback.build_events([
+        lead(lead_id="none", qualified_lead=1),
+        lead(lead_id="old", gclid="g", lead_date="2026-05-01", qualified_lead=1),
+        lead(lead_id="nodate", gclid="g", lead_date="", qualified_lead=1),
+        lead(lead_id="nostatus", gclid="g"),
+    ], NOW, LA)
+    reasons = dict(skipped)
+    assert "no gclid" in reasons["none"]
+    assert "older than 90 days" in reasons["old"]
+    assert reasons["nodate"] == "no lead_date"
+    assert reasons["nostatus"] == "no status to send yet"
+
+
+def test_a_lead_from_today_is_stamped_in_the_past():
+    events, _ = feedback.build_events([lead(gclid="g", lead_date="2026-09-29", qualified_lead=1)], NOW, LA)
+    assert events["offline_qualified_lead"][0]["eventTimestamp"] == "2026-09-29T09:59:00-07:00"
+
+
+def test_transaction_ids_are_stable_so_resending_never_double_counts():
+    rows = [lead(lead_id="", gclid="g", email="a@b.co", qualified_lead=1)]
+    first, _ = feedback.build_events(rows, NOW, LA)
+    second, _ = feedback.build_events(rows, NOW + datetime.timedelta(days=3), LA)
+    assert first["offline_qualified_lead"][0]["transactionId"] == second["offline_qualified_lead"][0]["transactionId"]
+
+
+class FakeResponse:
+    def __init__(self, status, payload):
+        self.status_code, self._payload, self.text = status, payload, str(payload)
+
+    def json(self):
+        return self._payload
+
+
+class FakeSession:
+    def __init__(self, status=200, payload=None):
+        self.calls, self.status, self.payload = [], status, payload or {"requestId": "req-1"}
+
+    def post(self, url, json, headers, timeout):
+        self.calls.append((url, json, headers))
+        return FakeResponse(self.status, self.payload)
+
+
+@pytest.fixture
+def outcomes(tmp_path):
+    path = tmp_path / "lead_outcomes.csv"
+    path.write_text(
+        "lead_date,lead_id,gclid,email,qualified_lead,appointment,closed_deal,not_qualified_reason,profit\n"
+        "2026-09-15,EXAMPLE-1,x,,yes,,,,\n"
+        "2026-09-10,L-1,TEST-GCLID-abc,,yes,yes,,,\n"
+        "2026-09-12,L-2,,seller@example.com,,,,Outside buy area,\n"
+        "2026-09-14,L-3,TEST-GCLID-def,,yes,,yes,,\"$20,000\"\n"
+    )
+    return path
+
+
+@pytest.fixture
+def api_settings(tmp_path):
+    loaded = config.load(tmp_path / "none.yaml", environ={})
+    loaded["customer_id"] = "989-715-5298"
+    loaded["api"].update(client_id="id", client_secret="secret", refresh_token="token")
+    return loaded
+
+
+def fake_actions(monkeypatch, missing=()):
+    names = {"offline_qualified_lead": 11, "offline_appointment_set": 12, "offline_poor_location": 13, "offline_closed_deal": 14}
+    table = {n: (i, "UPLOAD_CLICKS") for n, i in names.items() if n not in missing}
+    monkeypatch.setattr(feedback, "conversion_actions", lambda client, cid, wanted: {n: v for n, v in table.items() if n in wanted})
+
+
+def test_run_validates_by_default_one_request_per_action(monkeypatch, outcomes, api_settings):
+    fake_actions(monkeypatch)
+    session, lines = FakeSession(), []
+    code = feedback.run(api_settings, outcomes, now=NOW, client=object(), session=session, token="tok", log=lines.append)
+    assert code == 0
+    assert all(body["validateOnly"] is True for _, body, _ in session.calls)
+    by_action = {body["destinations"][0]["productDestinationId"]: body for _, body, _ in session.calls}
+    assert set(by_action) == {"11", "12", "13", "14"}
+    dest = by_action["11"]["destinations"][0]
+    assert dest["operatingAccount"] == {"accountType": "GOOGLE_ADS", "accountId": "9897155298"}
+    assert dest["loginAccount"]["accountId"] == "9897155298"
+    assert len(by_action["11"]["events"]) == 2  # L-1 and L-3
+    assert by_action["14"]["events"][0]["conversionValue"] == 20000.0
+    assert session.calls[0][0] == feedback.ENDPOINT and session.calls[0][2]["Authorization"] == "Bearer tok"
+    assert any("run the same command with --send" in line for line in lines)
+
+
+def test_send_flag_records_for_real(monkeypatch, outcomes, api_settings):
+    fake_actions(monkeypatch)
+    session = FakeSession()
+    feedback.run(api_settings, outcomes, send_for_real=True, now=NOW, client=object(), session=session, token="t", log=lambda *_: None)
+    assert session.calls and all(body["validateOnly"] is False for _, body, _ in session.calls)
+
+
+def test_missing_conversion_action_is_reported(monkeypatch, outcomes, api_settings):
+    fake_actions(monkeypatch, missing=("offline_closed_deal",))
+    lines = []
+    code = feedback.run(api_settings, outcomes, now=NOW, client=object(), session=FakeSession(), token="t", log=lines.append)
+    assert code == 1
+    assert any("offline_closed_deal: not in the Google Ads account" in line for line in lines)
+
+
+def test_missing_upload_permission_says_how_to_fix(monkeypatch, outcomes, api_settings):
+    fake_actions(monkeypatch)
+    denied = {"error": {"code": 403, "status": "PERMISSION_DENIED", "message": "Request had insufficient authentication scopes.",
+                        "details": [{"reason": "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}}
+    lines = []
+    code = feedback.run(api_settings, outcomes, now=NOW, client=object(), session=FakeSession(403, denied), token="t", log=lines.append)
+    assert code == 3
+    assert any("python ppc/export.py refresh-token" in line for line in lines)
+
+
+def test_api_switched_off_says_where_to_turn_it_on():
+    message = feedback.explain_http(403, {"error": {"message": "Data Manager API has not been used in project 1 before or it is disabled.",
+                                                    "details": [{"reason": "SERVICE_DISABLED"}]}})
+    assert feedback.ENABLE_API in message
+
+
+def test_refresh_token_is_saved_into_the_env_file(tmp_path):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import export
+
+    env = tmp_path / ".env"
+    env.write_text("GOOGLE_ADS_CLIENT_ID=abc\nGOOGLE_ADS_REFRESH_TOKEN=1//old\nGOOGLE_ADS_CUSTOMER_ID=9897155298\n")
+    settings = config.load(tmp_path / "config.yaml", environ={})
+    assert export.save_refresh_token(settings, "1//new-token") == str(env)
+    assert env.read_text() == "GOOGLE_ADS_CLIENT_ID=abc\nGOOGLE_ADS_REFRESH_TOKEN=1//new-token\nGOOGLE_ADS_CUSTOMER_ID=9897155298\n"
+
+    env.unlink()
+    yaml_path = tmp_path / "config.yaml"
+    yaml_path.write_text('api:\n  refresh_token: "old"\n')
+    settings = config.load(yaml_path, environ={})
+    assert export.save_refresh_token(settings, "1//new") == str(yaml_path)
+    assert 'refresh_token: "1//new"' in yaml_path.read_text()
+
+
+def test_upload_command_without_credentials_says_what_is_missing(tmp_path):
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    clean = {k: v for k, v in os.environ.items() if not k.startswith("GOOGLE_ADS_")}
+    result = subprocess.run([sys.executable, os.path.join(here, "export.py"), "upload", "--config", str(tmp_path / "none.yaml")],
+                            capture_output=True, text=True, env=clean, timeout=60)
+    assert result.returncode == 2 and "customer_id" in result.stdout

@@ -111,6 +111,13 @@ _OUTCOME_ALIASES.update(
         "net profit": "profit",
         "location": "city",
         "property city": "city",
+        "email address": "email",
+        "phone number": "phone",
+        "seller phone": "phone",
+        "reason": "not_qualified_reason",
+        "not qualified reason": "not_qualified_reason",
+        "disqualification reason": "not_qualified_reason",
+        "lost reason": "not_qualified_reason",
     }
 )
 
@@ -125,23 +132,23 @@ def ensure_outcomes_file(root):
     return path
 
 
-def load_outcomes(path, start, end):
-    """(leads in range, warnings). Example rows and undated rows are left out."""
+def read_outcome_rows(path):
+    """Every real lead row in a lead-outcomes file, with dates and flags parsed.
 
-    warnings = []
+    Example rows and empty rows are left out; nothing is filtered by date.
+    """
+
     if not path or not os.path.exists(path):
-        return [], warnings
+        return []
 
     # Excel's plain "CSV" is Windows-1252, "CSV UTF-8" has a BOM, Sheets is UTF-8.
     with open(path, "rb") as handle:
         text = normalize.decode(handle.read())
     reader = csv.DictReader(io.StringIO(text, newline=""))
     mapping = {h: _OUTCOME_ALIASES.get(normalize.header_key(h)) for h in reader.fieldnames or []}
-    raw_rows = list(reader)
 
-    leads, undated, outside = [], 0, 0
-    first, last = start.isoformat(), end.isoformat()
-    for raw in raw_rows:
+    leads = []
+    for raw in reader:
         lead = {column: "" for column in schema.LEAD_OUTCOME_COLUMNS}
         for header, column in mapping.items():
             if column:
@@ -151,15 +158,26 @@ def load_outcomes(path, start, end):
         if not any(lead[c] for c in schema.LEAD_OUTCOME_COLUMNS if c != "notes"):
             continue
         lead["lead_date"] = values.parse_date(lead["lead_date"])
+        for flag in schema.OUTCOME_FLAGS:
+            lead[flag] = values.parse_flag(lead[flag]) or 0
+        lead["profit"] = values.parse_number(lead["profit"])
+        leads.append(lead)
+    return leads
+
+
+def load_outcomes(path, start, end):
+    """(leads in range, warnings). Example rows and undated rows are left out."""
+
+    warnings = []
+    leads, undated, outside = [], 0, 0
+    first, last = start.isoformat(), end.isoformat()
+    for lead in read_outcome_rows(path):
         if not lead["lead_date"]:
             undated += 1
             continue
         if not first <= lead["lead_date"] <= last:
             outside += 1
             continue
-        for flag in schema.OUTCOME_FLAGS:
-            lead[flag] = values.parse_flag(lead[flag]) or 0
-        lead["profit"] = values.parse_number(lead["profit"])
         leads.append(lead)
 
     if undated:

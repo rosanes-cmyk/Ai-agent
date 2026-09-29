@@ -270,9 +270,12 @@ row per lead**, from the CRM or the Live Call Claims sheet:
 | column | |
 |---|---|
 | `lead_date` | the day the lead first came in (required) |
-| `lead_id` | your CRM / sheet ID (no names or phone numbers) |
-| `campaign`, `ad_group`, `keyword`, `search_term`, `city`, `gclid` | whatever is known. Blank keyword is fine, e.g. most phone calls. |
+| `lead_id` | your CRM / sheet ID |
+| `campaign`, `ad_group`, `keyword`, `search_term`, `city` | whatever is known. Blank keyword is fine, e.g. most phone calls. |
+| `gclid`, `gbraid`, `wbraid` | the click ID the form captured; this is what ties the lead to its exact click |
+| `email`, `phone` | optional; only used to match the lead for Google, hashed first, never written to the master file |
 | `qualified_lead`, `appointment`, `offer`, `contract`, `closed_deal` | yes / no |
+| `not_qualified_reason` | No contact, Not a seller, Outside buy area, Wants retail price, Price shopping, Unqualified seller, Fraud / spam |
 | `profit` | for closed deals |
 
 Then refresh the numbers without downloading again:
@@ -288,6 +291,44 @@ Leads fall into the export whose date range contains their `lead_date`. Leads
 with no keyword land on `(unknown keyword)` rows in their city. For cost per
 lead by city, add up spend and leads across all of that city's rows. Until the
 first lead is logged, those columns stay blank (not zero).
+
+## Sending lead results back to Google (the feedback loop)
+
+Google Ads bids better when it learns which clicks became qualified leads and
+deals. Google has closed its old upload method to new setups, so results now
+go through Google's **Data Manager API**. `upload` sends each status in
+`exports/lead_outcomes.csv` to its conversion action in Google Ads:
+
+| status | Google conversion action |
+|---|---|
+| qualified_lead | `offline_qualified_lead` |
+| appointment | `offline_appointment_set` |
+| offer | `offline_offer_made` |
+| contract | `offline_under_contract` |
+| closed_deal (value = profit) | `offline_closed_deal`, which you create first as an "Import from clicks" action |
+| not_qualified_reason | `offline_no_contact`, `offline_non_seller`, `offline_poor_location`, `offline_retail`, `offline_unqualified_seller`, `offline_fraud` |
+
+One-time setup:
+
+1. Turn on the Data Manager API in the same Google Cloud project as your OAuth
+   client: <https://console.cloud.google.com/apis/library/datamanager.googleapis.com>
+2. Run `python ppc/export.py refresh-token`. Sign in with the Google account
+   that runs THB's Google Ads, and allow both permissions (Google Ads, and Data
+   Manager). The new token is saved into `ppc/.env`.
+
+Each time:
+
+```bash
+python ppc/export.py upload          # Google checks every row and records nothing
+python ppc/export.py upload --send   # records them in Google Ads
+```
+
+- A lead needs a click ID (`gclid`, `gbraid` or `wbraid`), an email or a phone
+  number, or Google can't match it. Email and phone are normalised and SHA-256
+  hashed on your computer before anything is sent.
+- Each status gets a transaction ID (lead ID + action), so sending the same
+  file again never counts it twice.
+- Leads older than 90 days are skipped, because Google no longer accepts their clicks.
 
 ## Dates
 
@@ -313,7 +354,8 @@ binary if Playwright's own browser is not installed.
 
 | File | What it does |
 |---|---|
-| `export.py` | Command line: `api`, `check`, `browser`, `import`, `rebuild`, `demo`, `status`, `refresh-token`, `open-chrome` |
+| `export.py` | Command line: `api`, `check`, `browser`, `import`, `rebuild`, `demo`, `status`, `refresh-token`, `upload`, `open-chrome` |
+| `ppc_exporter/feedback.py` | Sends lead statuses back to Google through the Data Manager API |
 | `ppc_exporter/queries.py` | The GAQL for each report, with fallback variants |
 | `ppc_exporter/api_source.py` | API client, error explanations, OAuth helper |
 | `ppc_exporter/browser_source.py` | Browser fallback (Playwright) |

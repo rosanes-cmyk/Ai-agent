@@ -15,6 +15,9 @@ from .settings import digits
 CONSOLE_OVERVIEW = "https://console.cloud.google.com/google/ads-apis/overview"
 ENABLE_API = "https://console.cloud.google.com/flows/enableapi?apiid=googleads.googleapis.com"
 OAUTH_SCOPE = "https://www.googleapis.com/auth/adwords"
+# Uploading lead outcomes goes through the Data Manager API, which needs its
+# own permission on the same sign-in.
+DATAMANAGER_SCOPE = "https://www.googleapis.com/auth/datamanager"
 
 
 class ApiNotConfigured(Exception):
@@ -505,7 +508,7 @@ def generate_refresh_token(client_id, client_secret):
                 "token_uri": "https://oauth2.googleapis.com/token",
             }
         },
-        scopes=[OAUTH_SCOPE],
+        scopes=[OAUTH_SCOPE, DATAMANAGER_SCOPE],
     )
     credentials = flow.run_local_server(
         port=0,

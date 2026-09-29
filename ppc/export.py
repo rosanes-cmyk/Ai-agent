@@ -10,6 +10,7 @@
     python ppc/export.py demo            synthetic data end to end, no Google needed
     python ppc/export.py status          what is configured and what is missing
     python ppc/export.py refresh-token   one-time OAuth sign-in (only for the OAuth option)
+    python ppc/export.py upload          send lead statuses back to Google (validates unless --send)
 
 Every run writes exports/<date>/ with the six reports, ppc_master_data.csv,
 keyword_city_performance.csv, data_dictionary.md and manifest.json.
@@ -287,24 +288,60 @@ def cmd_status(settings, args, start, end):
     return EXIT_OK if not missing else EXIT_SETUP
 
 
-def cmd_refresh_token(settings, args, _start, _end):
-    api = settings["api"]
-    if not (api.get("client_id") and api.get("client_secret")):
-        log("Put your OAuth client_id and client_secret in ppc/config.yaml first (see README, OAuth option).")
-        return EXIT_SETUP
-    token = api_source.generate_refresh_token(api["client_id"], api["client_secret"])
-    path = settings["config_path"]
-    if not args.print_only and os.path.exists(path):
-        text = open(path, encoding="utf-8").read()
-        updated, count = re.subn(r'(?m)^(\s*refresh_token:\s*).*$', lambda m: m.group(1) + '"' + token + '"', text, count=1)
+def save_refresh_token(settings, token):
+    """Write the token where the current one lives: ppc/.env first, then config.yaml.
+
+    Returns the path written, or None when neither file holds a token line.
+    """
+
+    for path, pattern, render in (
+        (settings.get("env_path"), r"(?m)^(\s*(?:set\s+|export\s+)?GOOGLE_ADS_REFRESH_TOKEN\s*=\s*).*$", lambda m: m.group(1) + token),
+        (settings.get("config_path"), r"(?m)^(\s*refresh_token:\s*).*$", lambda m: m.group(1) + '"' + token + '"'),
+    ):
+        if not path or not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8-sig") as handle:
+            text = handle.read()
+        updated, count = re.subn(pattern, render, text, count=1)
         if count:
             with open(path, "w", encoding="utf-8") as handle:
                 handle.write(updated)
-            log(f"Saved the refresh token into {path}. Next: python ppc/export.py check")
-            return EXIT_OK
-    log("Refresh token (store it like a password; put it in config.yaml as api.refresh_token):")
+            return path
+    return None
+
+
+def cmd_refresh_token(settings, args, _start, _end):
+    api = settings["api"]
+    if not (api.get("client_id") and api.get("client_secret")):
+        log("Put your OAuth client_id and client_secret in ppc/.env or ppc/config.yaml first (see README, OAuth option).")
+        return EXIT_SETUP
+    log("A browser window opens. Sign in with the Google account that runs THB's Google Ads and allow both")
+    log("permissions (Google Ads, and Data Manager for sending lead results back).")
+    token = api_source.generate_refresh_token(api["client_id"], api["client_secret"])
+    written = None if args.print_only else save_refresh_token(settings, token)
+    if written:
+        log(f"Saved the new refresh token into {written}. Next: python ppc/export.py check")
+        return EXIT_OK
+    log("Refresh token (store it like a password; put it in ppc/.env as GOOGLE_ADS_REFRESH_TOKEN=...):")
     log(token)
     return EXIT_OK
+
+
+def cmd_upload(settings, args, _start, _end):
+    from ppc_exporter import feedback
+
+    missing = api_source.missing_settings(settings)
+    if missing:
+        raise api_source.ApiNotConfigured(missing)
+    path = os.path.expanduser(args.file) if args.file else str(config.output_root(settings, args.out) / master.OUTCOMES_FILE)
+    log(f"Lead results file: {path}")
+    try:
+        return feedback.run(settings, path, send_for_real=args.send, log=log)
+    except Exception as problem:
+        if type(problem).__name__ == "RefreshError":
+            log(api_source.explain(problem, settings))
+            return EXIT_SETUP
+        raise
 
 
 def cmd_open_chrome(settings, args, _start, _end):
@@ -365,6 +402,10 @@ def parser():
     t = command("refresh-token", "one-time Google sign-in to create an OAuth refresh token")
     t.add_argument("--print-only", action="store_true", help="print the token instead of saving it")
 
+    u = command("upload", "send lead statuses back to Google Ads (validates only, unless --send)")
+    u.add_argument("--file", help="lead results CSV (default: exports/lead_outcomes.csv)")
+    u.add_argument("--send", action="store_true", help="record the conversions in Google Ads (default: validate only)")
+
     c = command("open-chrome", "open a normal Chrome window for --attach")
     c.add_argument("--port", type=int, default=9222)
     return p
@@ -381,6 +422,7 @@ COMMANDS = {
     "demo": cmd_demo,
     "status": cmd_status,
     "refresh-token": cmd_refresh_token,
+    "upload": cmd_upload,
     "open-chrome": cmd_open_chrome,
 }
 
