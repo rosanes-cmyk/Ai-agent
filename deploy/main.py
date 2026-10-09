@@ -3081,6 +3081,23 @@ def hello_http(request):
             )
 
 
+        # Absorb any seller detail riding along on this event.
+        #
+        # The listener only learns the seller's number if something sends
+        # it: the agent through update_call_data, or Zapier when it maps
+        # the thread. Neither is guaranteed to have happened by the time a
+        # transfer ends -- a call claimed in the first thirty seconds can
+        # reach here with nothing but a lead source.
+        #
+        # That falls hardest on the card that matters most. "TRANSFER DID
+        # NOT CONNECT" exists to put a number in front of somebody while
+        # the seller is still worth ringing, and without this it was liable
+        # to print the line and no number. Retell's own payload carries
+        # from_number, which merge_call_data already accepts as an alias
+        # for phone, so the fix is to stop throwing it away.
+        merge_call_data(call_id, payload)
+
+
         claim = CLAIMED_CALLS.get(call_id)
 
 
