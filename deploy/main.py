@@ -1672,6 +1672,175 @@ def send_after_hours_notice(clock, from_number):
 # REPLY INSIDE A CHAT THREAD
 # =========================================================
 
+def claimant_for_phone(number):
+    """Whoever on the roster answers to this number, or "" if nobody does.
+
+    The transfer destination arrives as a bare number. Printing it on a
+    card is the same mistake as filing a call under a ring group's
+    number -- right, useless, and it reads as data where a person
+    belongs.
+    """
+
+    wanted = re.sub(
+        r"\D",
+        "",
+        str(number or ""),
+    )[-10:]
+
+
+    if not wanted:
+        return ""
+
+
+    for record in CLAIMANTS.values():
+
+        phone = re.sub(
+            r"\D",
+            "",
+            str(record.get("phone") or ""),
+        )[-10:]
+
+        if phone and phone == wanted:
+            return str(record.get("name") or "")
+
+
+    return ""
+
+
+def post_auto_transfer(call_id, payload, space_name):
+    """The AI put the seller through without waiting for a claim.
+
+    Same ending as a claimed transfer and a different story: nobody
+    volunteered, the seller asked, and the agent handed them over. The
+    team's first warning that a rep is mid-conversation is this card, so
+    it carries the booking prompt like the claimed one does -- the visit
+    is just as bookable and the rep is just as unlikely to be asked
+    otherwise.
+    """
+
+    call_data = get_call_data(call_id)
+
+
+    destination = (
+        payload.get("transfer_to")
+        or payload.get("transfer_destination_number")
+        or payload.get("to_number")
+        or ""
+    )
+
+
+    who = claimant_for_phone(destination)
+
+
+    lines = [
+        "\U0001F7E2 *AI PUT THE SELLER THROUGH*",
+        "",
+        "The seller asked for a person, so the Voice AI "
+        "transferred them without waiting for a claim.",
+        "",
+    ]
+
+
+    if who:
+        lines.append("\U0001F64B *Transferred to:* " + who)
+
+    elif destination:
+        # Not on the roster. Say the number rather than pretend we know
+        # -- somebody has to recognise it, and "a team member" would
+        # hide the fact that the agent is dialling a number nobody here
+        # has a name for.
+        lines.append(
+            "\U0001F4DE *Transferred to:* " + str(destination)
+        )
+
+
+    for field, label in (
+        ("lead_source", "\U0001F3F7\uFE0F *Lead Source:*"),
+        ("name", "\U0001F464 *Name:*"),
+        ("phone", "\U0001F4DE *Phone:*"),
+        ("property", "\U0001F3E0 *Property:*"),
+    ):
+
+        value = _clean_live_value(
+            call_data.get(field)
+        ).replace("*", "")
+
+        if value:
+            lines.append(label + " " + value)
+
+
+    lines.append("")
+    lines.append(
+        "Booked a property visit? "
+        "Reply with the day and time:"
+    )
+    lines.append(booking_example())
+
+
+    if not _clean_live_value(call_data.get("property")):
+        lines.append(
+            "No address on file \u2014 add it after the time."
+        )
+
+
+    lines.append("Nothing booked? Ignore this.")
+    lines.append("")
+    lines.append("Ref: " + call_id)
+
+
+    thread_id = post_new_card(
+        space_name,
+        "\n".join(lines),
+    )
+
+
+    if thread_id and thread_id != "posted":
+
+        mark_answered_thread(
+            thread_id,
+            {
+                "phone": _clean_live_value(
+                    call_data.get("phone")
+                ),
+                "name": _clean_live_value(
+                    call_data.get("name")
+                ),
+                "lead_source": _clean_live_value(
+                    call_data.get("lead_source")
+                ),
+                "address": _clean_live_value(
+                    call_data.get("property")
+                ),
+                "space": space_name,
+            },
+        )
+
+
+    logging.info(
+        "AUTO_TRANSFER_REPORTED "
+        "call_id=%s to=%s who=%s thread=%s",
+        call_id,
+        destination or "(not sent)",
+        who or "(not on the roster)",
+        thread_id or "(not posted)",
+    )
+
+
+    return (
+        json.dumps({
+            "success": True,
+            "posted": bool(thread_id),
+            "auto_transfer": True,
+            "transferred_to": who or destination,
+        }),
+        200,
+        {
+            "Content-Type":
+                "application/json"
+        },
+    )
+
+
 def booking_example():
     """A date in the near future, formatted the way the parser reads it.
 
@@ -3098,52 +3267,6 @@ def hello_http(request):
         merge_call_data(call_id, payload)
 
 
-        claim = CLAIMED_CALLS.get(call_id)
-
-
-        # Nobody claimed this call, so there is no promise to report
-        # on. The AI handling a call to the end is the normal case,
-        # not an event worth a card.
-
-        if not claim:
-
-            logging.info(
-                "TRANSFER_RESULT_UNCLAIMED call_id=%s",
-                call_id,
-            )
-
-
-            return (
-                json.dumps({
-                    "success": True,
-                    "posted": False,
-                    "reason": "call was never claimed",
-                }),
-                200,
-                {
-                    "Content-Type":
-                        "application/json"
-                },
-            )
-
-
-        thread_id = str(
-            claim.get("thread_id", "")
-        ).strip()
-
-
-        space_name = (
-            space_from_resource(thread_id)
-            or claim.get("space")
-            or OTHER_LEADS_SPACE
-        )
-
-
-        claimed_by = str(
-            claim.get("claimed_by", "")
-        ).strip() or "the claimant"
-
-
         reason = str(
             payload.get(
                 "disconnection_reason",
@@ -3172,6 +3295,92 @@ def hello_http(request):
             reason == "call_transfer"
             or event == "transfer_started"
         )
+
+
+        claim = CLAIMED_CALLS.get(call_id)
+
+
+        if not claim:
+
+            # An unclaimed call that merely ended is the normal case and
+            # not an event worth a card. An unclaimed call that was
+            # TRANSFERRED is a different thing: the seller asked for a
+            # person and the agent put them through without waiting for
+            # anyone to reply ME. Somebody is on the phone with a seller
+            # right now and, until this, nothing said so.
+            if not transferred:
+
+                logging.info(
+                    "TRANSFER_RESULT_UNCLAIMED call_id=%s",
+                    call_id,
+                )
+
+
+                return (
+                    json.dumps({
+                        "success": True,
+                        "posted": False,
+                        "reason": "call was never claimed",
+                    }),
+                    200,
+                    {
+                        "Content-Type":
+                            "application/json"
+                    },
+                )
+
+
+            # Out of hours every call is transferred, to the answering
+            # service, and the after-hours card has already said so.
+            # Reporting it again would put a second card under every
+            # night caller claiming a rep took it.
+            if office_clock()["office_open"] == "no":
+
+                logging.info(
+                    "AUTO_TRANSFER_OUT_OF_HOURS call_id=%s",
+                    call_id,
+                )
+
+
+                return (
+                    json.dumps({
+                        "success": True,
+                        "posted": False,
+                        "reason": "after hours, already reported",
+                    }),
+                    200,
+                    {
+                        "Content-Type":
+                            "application/json"
+                    },
+                )
+
+
+            return post_auto_transfer(
+                call_id,
+                payload,
+                space_from_resource(
+                    payload.get("space")
+                )
+                or OTHER_LEADS_SPACE,
+            )
+
+
+        thread_id = str(
+            claim.get("thread_id", "")
+        ).strip()
+
+
+        space_name = (
+            space_from_resource(thread_id)
+            or claim.get("space")
+            or OTHER_LEADS_SPACE
+        )
+
+
+        claimed_by = str(
+            claim.get("claimed_by", "")
+        ).strip() or "the claimant"
 
 
         call_data = get_call_data(call_id)
