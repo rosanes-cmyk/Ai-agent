@@ -2992,7 +2992,26 @@ def hello_http(request):
         ).strip()
 
 
-        transferred = reason == "call_transfer"
+        # Retell names a completed transfer twice, in two events that
+        # arrive at different moments, and which of them a Zap can see
+        # depends on how its paths are cut. transfer_started fires the
+        # instant the agent hands over; call_ended carries
+        # disconnection_reason=call_transfer once the leg closes. Either
+        # one means the seller reached a person, so accept both rather
+        # than making the wiring pick the right one -- it was picking
+        # wrong silently, and the card simply never appeared.
+        event = str(
+            payload.get(
+                "event",
+                "",
+            )
+        ).strip()
+
+
+        transferred = (
+            reason == "call_transfer"
+            or event == "transfer_started"
+        )
 
 
         call_data = get_call_data(call_id)
@@ -3008,7 +3027,11 @@ def hello_http(request):
                 "The seller is speaking with "
                 + claimed_by
                 + " now.",
-                "The Voice AI has left the call.",
+                # Not "has left". These transfers are warm: the agent
+                # dials the rep, reads them the handoff prompt and only
+                # then drops off, so at the moment this fires it is
+                # still on the line.
+                "The Voice AI is handing over and will drop off.",
                 "",
                 # The same prompt the human-answered card carries, in the
                 # same words. A rep who took the call through the AI can
@@ -3059,6 +3082,11 @@ def hello_http(request):
             if reason:
                 lines.append(
                     "\U0001F4CB *Ended by:* " + reason
+                )
+
+            elif event:
+                lines.append(
+                    "\U0001F4CB *Event:* " + event
                 )
 
 
@@ -3140,11 +3168,12 @@ def hello_http(request):
 
         logging.info(
             "TRANSFER_RESULT "
-            "call_id=%s claimed_by=%s reason=%s "
+            "call_id=%s claimed_by=%s reason=%s event=%s "
             "transferred=%s posted=%s",
             call_id,
             claimed_by,
             reason or "(not sent)",
+            event or "(not sent)",
             transferred,
             posted,
         )
