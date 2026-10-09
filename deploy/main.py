@@ -3367,6 +3367,177 @@ def hello_http(request):
         )
 
 
+    # =====================================================
+    # THE SELLER ASKED FOR A PERSON
+    #
+    # Every other card here reports something the system did. This one
+    # reports something the seller did, and it is the only one of the
+    # set where the caller has already told us the AI is not what they
+    # want. Left to the ordinary card it sits in the space looking like
+    # any other live call, and the request -- the strongest buying
+    # signal a seller gives -- reads as ordinary traffic.
+    #
+    # Posted as its own card with an @all. The 120-second claim window
+    # is measured from a card, so a request arriving four minutes into
+    # a call would otherwise land under a card that can no longer be
+    # claimed: the rep types ME, nothing happens, and nothing explains
+    # why. Registering the new card restarts that window.
+    # =====================================================
+
+    if payload.get("action") == "agent_requested":
+
+        call_id = str(
+            payload.get(
+                "call_id",
+                "",
+            )
+        ).strip()
+
+
+        if not call_id:
+
+            logging.error(
+                "AGENT_REQUESTED_MISSING_CALL_ID"
+            )
+
+
+            return (
+                json.dumps({
+                    "success": False,
+                    "error": "call_id missing",
+                }),
+                400,
+                {
+                    "Content-Type":
+                        "application/json"
+                },
+            )
+
+
+        merge_call_data(call_id, payload)
+
+
+        space_name = (
+            space_from_resource(
+                payload.get("space")
+            )
+            or OTHER_LEADS_SPACE
+        )
+
+
+        # Already claimed, and the AI asked anyway. Saying so twice
+        # would put two live claims on one seller.
+        if call_id in CLAIMED_CALLS:
+
+            logging.info(
+                "AGENT_REQUESTED_ALREADY_CLAIMED "
+                "call_id=%s claimed_by=%s",
+                call_id,
+                CLAIMED_CALLS[call_id].get("claimed_by", ""),
+            )
+
+
+            return (
+                json.dumps({
+                    "success": True,
+                    "posted": False,
+                    "reason": "already claimed",
+                }),
+                200,
+                {
+                    "Content-Type":
+                        "application/json"
+                },
+            )
+
+
+        call_data = get_call_data(call_id)
+
+
+        lines = [
+            "\U0001F64B *SELLER ASKED FOR A PERSON*",
+            "",
+            "They have asked to speak with someone rather than "
+            "carry on with the Voice AI.",
+            "",
+        ]
+
+
+        for field, label in (
+            ("lead_source", "\U0001F3F7\uFE0F *Lead Source:*"),
+            ("name", "\U0001F464 *Name:*"),
+            ("phone", "\U0001F4DE *Phone:*"),
+            ("property", "\U0001F3E0 *Property:*"),
+            ("reason", "\U0001F4DD *Reason:*"),
+        ):
+
+            value = _clean_live_value(
+                call_data.get(field)
+            ).replace("*", "")
+
+            if value:
+                lines.append(label + " " + value)
+
+
+        lines.append("")
+        lines.append(
+            "\U0001F4DE Reply \"ME\" within 2 minutes "
+            "to take the call."
+        )
+        lines.append("")
+        lines.append(MENTION_ALL)
+        lines.append("")
+        lines.append("Ref: " + call_id)
+
+
+        thread_id = post_new_card(
+            space_name,
+            "\n".join(lines),
+        )
+
+
+        # Without this the card is a dead end: a claim is matched by
+        # looking the thread up, so ME typed under a card nobody
+        # registered resolves to no call at all.
+        if thread_id and thread_id != "posted":
+
+            requested_at = time.time()
+
+            THREAD_CALLS[thread_id] = {
+                "call_id": call_id,
+                "mapped_at": requested_at,
+            }
+
+            LATEST_CALLS[space_name] = {
+                "call_id": call_id,
+                "thread_id": thread_id,
+                "mapped_at": requested_at,
+            }
+
+
+        logging.info(
+            "AGENT_REQUESTED "
+            "call_id=%s space=%s thread=%s",
+            call_id,
+            space_name,
+            thread_id or "(not posted)",
+        )
+
+
+        return (
+            json.dumps({
+                "success": True,
+                "posted": bool(thread_id),
+                "thread_id": thread_id,
+            }),
+            200,
+            {
+                "Content-Type":
+                    "application/json"
+            },
+        )
+
+
     if payload.get("action") == "map_thread":
 
         thread_id = str(
