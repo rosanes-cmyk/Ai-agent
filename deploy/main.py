@@ -1744,11 +1744,18 @@ def post_auto_transfer(call_id, payload, space_name):
     if who:
         lines.append("\U0001F64B *Transferred to:* " + who)
 
-    elif destination:
+    elif len(re.sub(r"\D", "", str(destination))) >= 10:
         # Not on the roster. Say the number rather than pretend we know
         # -- somebody has to recognise it, and "a team member" would
         # hide the fact that the agent is dialling a number nobody here
         # has a name for.
+        #
+        # Only when it IS a number. Zapier's field picker offers only
+        # what is in the sample it last loaded, and a sample taken from
+        # call_analyzed carries no transfer destination at all, so the
+        # field is easy to fill in by typing its NAME. Printing whatever
+        # arrived would put "Transfer Destination Number" on a card
+        # where a person belongs, and it would look like our bug.
         lines.append(
             "\U0001F4DE *Transferred to:* " + str(destination)
         )
