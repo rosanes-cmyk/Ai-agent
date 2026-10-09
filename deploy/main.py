@@ -1900,19 +1900,30 @@ def post_auto_transfer(call_id, payload, space_name):
     who = claimant_for_phone(destination)
 
 
+    # "Put through" was a claim this card could not make. It fires on
+    # transfer_started, which is the agent beginning to RING somebody --
+    # warm transfer, 30-second detection window -- so on every call where
+    # the target did not pick up it announced a connection that never
+    # happened. The team read it, stopped watching, and the seller was
+    # gone.
+    #
+    # Ringing is what is actually known at this moment. If nobody
+    # answers, the transfer_failed card follows and offers the call to
+    # everyone; if somebody does, this card is the last word and already
+    # carries the booking prompt.
     lines = [
-        "\U0001F7E2 *AI PUT THE SELLER THROUGH*",
+        "\U0001F7E1 *RINGING "
+        + ((who or "A PERSON").upper())
+        + "*",
         "",
-        "The seller asked for a person, so the Voice AI "
-        "transferred them without waiting for a claim.",
+        "The seller asked for a person. The Voice AI is "
+        "ringing them now and stays on the line until "
+        "they pick up.",
         "",
     ]
 
 
-    if who:
-        lines.append("\U0001F64B *Transferred to:* " + who)
-
-    elif len(re.sub(r"\D", "", str(destination))) >= 10:
+    if not who and len(re.sub(r"\D", "", str(destination))) >= 10:
         # Not on the roster. Say the number rather than pretend we know
         # -- somebody has to recognise it, and "a team member" would
         # hide the fact that the agent is dialling a number nobody here
