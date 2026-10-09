@@ -1672,6 +1672,149 @@ def send_after_hours_notice(clock, from_number):
 # REPLY INSIDE A CHAT THREAD
 # =========================================================
 
+def booking_example():
+    """A date in the near future, formatted the way the parser reads it.
+
+    The example used to be a fixed "Sep 2, 2pm", copied from the Zapier
+    card. Typed literally after the 2nd of September it books into the
+    FOLLOWING year -- the parser takes the next occurrence, correctly,
+    because nobody schedules a visit in the past. A worked example that
+    quietly means 2027 is worse than none.
+    """
+
+    try:
+
+        now = datetime.datetime.now(
+            zoneinfo.ZoneInfo(OFFICE_TIMEZONE)
+        )
+
+        return (
+            (now + datetime.timedelta(days=3))
+            .strftime("%b %-d")
+            + ", 2pm"
+        )
+
+    except Exception as error:
+
+        logging.warning(
+            "BOOKING_EXAMPLE_FAILED error=%s",
+            error,
+        )
+
+        return "Oct 15, 2pm"
+
+
+def post_new_card(
+    space_name,
+    text,
+):
+    """Post a card of its own, and hand back the thread it opened.
+
+    A reply collapses to "1 reply" and is read when somebody thinks to
+    expand it. That is fine for a notice. It is not fine for a card
+    carrying an instruction the team has to act on, which is why the
+    transfer result goes out as a card in the space rather than under
+    the one it belongs to.
+
+    The thread name comes back in the response, and the caller needs it:
+    a booking typed under this card is only read as a booking if THIS
+    thread is the one that was marked, not the card above it.
+    """
+
+    webhook_url = get_chat_webhook(
+        space_name
+    )
+
+
+    if not webhook_url:
+
+        logging.error(
+            "NEW_CARD_NO_WEBHOOK space=%s",
+            space_name,
+        )
+
+        return ""
+
+
+    request = urllib.request.Request(
+        webhook_url,
+        data=json.dumps({
+            "text": text,
+        }).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+        },
+    )
+
+
+    try:
+
+        with urllib.request.urlopen(
+            request,
+            timeout=10,
+        ) as response:
+
+            raw = response.read().decode(
+                "utf-8",
+                errors="replace",
+            )
+
+
+        try:
+            posted = json.loads(raw)
+        except ValueError:
+            posted = {}
+
+
+        thread_id = str(
+            (posted.get("thread") or {}).get("name", "")
+        ).strip()
+
+
+        # Posted either way. An unreadable response costs the booking
+        # prompt on this card, not the card itself, so say so and carry
+        # on rather than treating it as a failure.
+        if not thread_id:
+            logging.warning(
+                "NEW_CARD_NO_THREAD_IN_RESPONSE space=%s",
+                space_name,
+            )
+
+
+        logging.info(
+            "NEW_CARD_SENT space=%s thread=%s",
+            space_name,
+            thread_id or "(not returned)",
+        )
+
+
+        return thread_id or "posted"
+
+
+    except urllib.error.HTTPError as error:
+
+        logging.error(
+            "NEW_CARD_HTTP_ERROR space=%s status=%s body=%s",
+            space_name,
+            error.code,
+            error.read().decode("utf-8", errors="replace"),
+        )
+
+        return ""
+
+
+    except Exception as error:
+
+        logging.error(
+            "NEW_CARD_FAILED space=%s error=%s",
+            space_name,
+            error,
+        )
+
+        return ""
+
+
 def post_thread_reply(
     space_name,
     thread_id,
@@ -3042,7 +3185,7 @@ def hello_http(request):
                 # asked about.
                 "Booked a property visit? "
                 "Reply with the day and time:",
-                "Sep 2, 2pm",
+                booking_example(),
             ]
 
 
@@ -3104,15 +3247,29 @@ def hello_http(request):
         lines.append("Ref: " + call_id)
 
 
-        posted = False
+        # A card of its own, not a reply under the claim. Chat collapses
+        # a thread to "1 reply", and both of these ask for something: the
+        # green one for a booking, the warning for a callback nobody else
+        # can make now. Neither survives being folded away.
+        posted_thread = post_new_card(
+            space_name,
+            "\n".join(lines),
+        )
 
 
-        if thread_id:
+        posted = bool(posted_thread)
 
-            posted = post_thread_reply(
-                space_name,
-                thread_id,
-                "\n".join(lines),
+
+        if posted:
+
+            # The booking belongs to the card that asked for it, which is
+            # this new one -- not the claim card above it. Marking the
+            # wrong thread would print the prompt and then ignore every
+            # reply to it.
+            booking_thread = (
+                posted_thread
+                if posted_thread != "posted"
+                else thread_id
             )
 
 
@@ -3121,10 +3278,10 @@ def hello_http(request):
             # mark is what carries the seller's details into the booking
             # -- the address especially, which the rep is not going to
             # retype and the parser falls back to.
-            if transferred and posted:
+            if transferred and booking_thread:
 
                 mark_answered_thread(
-                    thread_id,
+                    booking_thread,
                     {
                         "phone": _clean_live_value(
                             call_data.get("phone")
@@ -3146,23 +3303,20 @@ def hello_http(request):
                 logging.info(
                     "TRANSFER_THREAD_MARKED_FOR_BOOKING "
                     "thread=%s call_id=%s",
-                    thread_id,
+                    booking_thread,
                     call_id,
                 )
 
 
         else:
 
-            # A claim with no thread predates this field, or came
-            # through a path that never recorded one. Say so rather
-            # than dropping a failed transfer in silence.
-
             logging.error(
-                "TRANSFER_RESULT_NO_THREAD "
-                "call_id=%s claimed_by=%s transferred=%s",
+                "TRANSFER_RESULT_NOT_POSTED "
+                "call_id=%s claimed_by=%s transferred=%s space=%s",
                 call_id,
                 claimed_by,
                 transferred,
+                space_name,
             )
 
 
