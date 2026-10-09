@@ -1717,6 +1717,164 @@ def claimant_for_phone(number):
     return ""
 
 
+# How much of the intake has to be in hand before a call counts as
+# having got somewhere. A name and a property is a lead; a phone number
+# alone is somebody who rang off.
+COMPLETE_INTAKE_FIELDS = ("name", "property")
+
+
+def post_seller_left(call_id, reason, space_name):
+    """A seller who reached nobody, and nobody was told.
+
+    Six separate endings arrive here and mean one thing: hung up during
+    the questions, went silent until the timer cut them off, asked for a
+    person and never got one, the agent's own fault, Retell's own fault.
+    Six cards for one meaning is how a team learns to scroll past all of
+    them, so this is one card that names the ending on a line.
+
+    It does NOT fire for a call the AI saw through to the end. That
+    seller is already in the intake inbox and already has a callback
+    card from Zapier, and posting a second one for every AI-handled call
+    would bury the ones here that nobody has.
+    """
+
+    call_data = get_call_data(call_id)
+
+
+    got = [
+        field
+        for field in COMPLETE_INTAKE_FIELDS
+        if _clean_live_value(call_data.get(field))
+    ]
+
+
+    if len(got) == len(COMPLETE_INTAKE_FIELDS):
+
+        logging.info(
+            "SELLER_LEFT_INTAKE_COMPLETE "
+            "call_id=%s reason=%s",
+            call_id,
+            reason or "(not sent)",
+        )
+
+
+        return (
+            json.dumps({
+                "success": True,
+                "posted": False,
+                "reason": "intake completed, Zapier covers the callback",
+            }),
+            200,
+            {
+                "Content-Type":
+                    "application/json"
+            },
+        )
+
+
+    phone = _clean_live_value(
+        call_data.get("phone")
+    )
+
+
+    endings = {
+        "user_hangup":
+            "They hung up before the questions were finished.",
+        "agent_hangup":
+            "The Voice AI ended the call.",
+        "voicemail_reached":
+            "The line went to voicemail.",
+        "max_duration_reached":
+            "The call hit its time limit.",
+        "inactivity":
+            "They went quiet and the call timed out.",
+        "machine_detected":
+            "An answering machine picked up.",
+    }
+
+
+    lines = [
+        "\u260E\uFE0F *NOBODY SPOKE TO THIS SELLER*",
+        "",
+        endings.get(
+            reason,
+            "The call ended before anyone reached them.",
+        ),
+        "",
+    ]
+
+
+    if phone:
+        lines.append(
+            "\U0001F4DE *Call them back:* " + phone
+        )
+
+    else:
+        # No number is the worst version of this card and still worth
+        # posting: Retell's own call history has the caller, and a
+        # person knowing to go and look is the whole difference.
+        lines.append(
+            "\u26A0\uFE0F *No number captured* \u2014 "
+            "find this call in Retell."
+        )
+
+
+    for field, label in (
+        ("lead_source", "\U0001F3F7\uFE0F *Lead Source:*"),
+        ("name", "\U0001F464 *Name:*"),
+        ("property", "\U0001F3E0 *Property:*"),
+        ("asked_for", "\U0001F5E3\uFE0F *Asked for:*"),
+    ):
+
+        value = _clean_live_value(
+            call_data.get(field)
+        ).replace("*", "")
+
+        if value:
+            lines.append(label + " " + value)
+
+
+    if reason:
+        lines.append(
+            "\U0001F4CB *Ended:* " + reason
+        )
+
+
+    lines.append("")
+    lines.append("Ref: " + call_id)
+
+
+    thread_id = post_new_card(
+        space_name,
+        "\n".join(lines),
+    )
+
+
+    logging.info(
+        "SELLER_LEFT "
+        "call_id=%s reason=%s had=%s phone=%s posted=%s",
+        call_id,
+        reason or "(not sent)",
+        ",".join(got) or "nothing",
+        bool(phone),
+        bool(thread_id),
+    )
+
+
+    return (
+        json.dumps({
+            "success": True,
+            "posted": bool(thread_id),
+            "seller_left": True,
+        }),
+        200,
+        {
+            "Content-Type":
+                "application/json"
+        },
+    )
+
+
 def post_auto_transfer(call_id, payload, space_name):
     """The AI put the seller through without waiting for a claim.
 
@@ -3353,23 +3511,13 @@ def hello_http(request):
             # right now and, until this, nothing said so.
             if not transferred:
 
-                logging.info(
-                    "TRANSFER_RESULT_UNCLAIMED call_id=%s",
+                return post_seller_left(
                     call_id,
-                )
-
-
-                return (
-                    json.dumps({
-                        "success": True,
-                        "posted": False,
-                        "reason": "call was never claimed",
-                    }),
-                    200,
-                    {
-                        "Content-Type":
-                            "application/json"
-                    },
+                    reason,
+                    space_from_resource(
+                        payload.get("space")
+                    )
+                    or OTHER_LEADS_SPACE,
                 )
 
 
