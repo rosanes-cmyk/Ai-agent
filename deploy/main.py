@@ -2995,6 +2995,9 @@ def hello_http(request):
         transferred = reason == "call_transfer"
 
 
+        call_data = get_call_data(call_id)
+
+
         if transferred:
 
             lines = [
@@ -3006,7 +3009,29 @@ def hello_http(request):
                 + claimed_by
                 + " now.",
                 "The Voice AI has left the call.",
+                "",
+                # The same prompt the human-answered card carries, in the
+                # same words. A rep who took the call through the AI can
+                # book a visit exactly as one who picked up the ring group
+                # does -- before this, the booking prompt only ever
+                # followed a call the AI never touched, so a seller the AI
+                # qualified AND handed over was the one case nobody was
+                # asked about.
+                "Booked a property visit? "
+                "Reply with the day and time:",
+                "Sep 2, 2pm",
             ]
+
+
+            if not _clean_live_value(
+                call_data.get("property")
+            ):
+                lines.append(
+                    "No address on file \u2014 add it after the time."
+                )
+
+
+            lines.append("Nothing booked? Ignore this.")
 
 
         else:
@@ -3021,7 +3046,7 @@ def hello_http(request):
 
 
             caller = _clean_live_value(
-                get_call_data(call_id).get("phone")
+                call_data.get("phone")
             )
 
 
@@ -3061,6 +3086,41 @@ def hello_http(request):
                 thread_id,
                 "\n".join(lines),
             )
+
+
+            # Printing the prompt is not enough on its own. A reply is
+            # only read as a booking when the thread is marked, and the
+            # mark is what carries the seller's details into the booking
+            # -- the address especially, which the rep is not going to
+            # retype and the parser falls back to.
+            if transferred and posted:
+
+                mark_answered_thread(
+                    thread_id,
+                    {
+                        "phone": _clean_live_value(
+                            call_data.get("phone")
+                        ),
+                        "name": _clean_live_value(
+                            call_data.get("name")
+                        ),
+                        "lead_source": _clean_live_value(
+                            call_data.get("lead_source")
+                        ),
+                        "address": _clean_live_value(
+                            call_data.get("property")
+                        ),
+                        "space": space_name,
+                    },
+                )
+
+
+                logging.info(
+                    "TRANSFER_THREAD_MARKED_FOR_BOOKING "
+                    "thread=%s call_id=%s",
+                    thread_id,
+                    call_id,
+                )
 
 
         else:
