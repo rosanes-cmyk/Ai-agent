@@ -1,0 +1,12 @@
+# Python bytecode. Written whenever main.py is imported -- which happens
+# any time somebody runs it locally to check a card's wording before
+# deploying -- and it is generated output, never source.
+__pycache__/
+*.py[cod]
+
+# Local environment. The listener's settings are the Chat webhook URLs and
+# the Retell key: credentials, which live in the Cloud Run environment and
+# must never reach a commit or a screenshot.
+.env
+.env.*
+!.env.example
