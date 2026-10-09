@@ -3796,6 +3796,196 @@ def hello_http(request):
         )
 
 
+    # =====================================================
+    # THE PERSON THEY ASKED FOR DID NOT PICK UP
+    #
+    # The one card in the set where the call is still winnable. These
+    # transfers are warm -- the agent dials the rep and stays on the
+    # line -- so a target who does not answer leaves the AI holding a
+    # seller who is still there, still interested, and now slightly
+    # annoyed. Anybody can take it.
+    #
+    # Without this the team sees "AI PUT THE SELLER THROUGH" and nothing
+    # else, which is worse than silence: it says the call was handled by
+    # somebody who never picked up.
+    # =====================================================
+
+    if payload.get("action") == "transfer_failed":
+
+        call_id = str(
+            payload.get(
+                "call_id",
+                "",
+            )
+        ).strip()
+
+
+        if not call_id:
+
+            logging.error(
+                "TRANSFER_FAILED_MISSING_CALL_ID"
+            )
+
+
+            return (
+                json.dumps({
+                    "success": False,
+                    "error": "call_id missing",
+                }),
+                400,
+                {
+                    "Content-Type":
+                        "application/json"
+                },
+            )
+
+
+        merge_call_data(call_id, payload)
+
+
+        space_name = (
+            space_from_resource(
+                payload.get("space")
+            )
+            or OTHER_LEADS_SPACE
+        )
+
+
+        call_data = get_call_data(call_id)
+
+
+        # Who was tried: what the agent says it dialled, else the name
+        # the seller asked for, else nobody in particular.
+        tried = _clean_live_value(
+            payload.get("tried")
+            or payload.get("transfer_to")
+            or ""
+        ).replace("*", "")
+
+
+        tried = (
+            claimant_for_phone(tried)
+            or (tried if not re.sub(r"\D", "", tried) else "")
+        )
+
+
+        asked_for = _clean_live_value(
+            call_data.get("asked_for")
+        ).replace("*", "")
+
+
+        missing = tried or asked_for
+
+
+        if missing:
+            headline = (
+                "\u26A0\uFE0F *"
+                + missing.upper()
+                + " DID NOT PICK UP*"
+            )
+            opening = (
+                "The seller asked for "
+                + missing
+                + " and the transfer rang out."
+            )
+
+        else:
+            headline = "\u26A0\uFE0F *THE TRANSFER RANG OUT*"
+            opening = (
+                "The seller asked for a person and "
+                "nobody answered."
+            )
+
+
+        lines = [
+            headline,
+            "",
+            opening,
+            "The Voice AI still has them on the line.",
+            "",
+        ]
+
+
+        for field, label in (
+            ("lead_source", "\U0001F3F7\uFE0F *Lead Source:*"),
+            ("name", "\U0001F464 *Name:*"),
+            ("phone", "\U0001F4DE *Phone:*"),
+            ("property", "\U0001F3E0 *Property:*"),
+        ):
+
+            value = _clean_live_value(
+                call_data.get(field)
+            ).replace("*", "")
+
+            if value:
+                lines.append(label + " " + value)
+
+
+        lines.append("")
+        lines.append(
+            "\U0001F4DE *Anyone can take this* \u2014 "
+            "reply \"ME\" within 2 minutes."
+        )
+        lines.append("")
+        lines.append(MENTION_ALL)
+        lines.append("")
+        lines.append("Ref: " + call_id)
+
+
+        thread_id = post_new_card(
+            space_name,
+            "\n".join(lines),
+        )
+
+
+        # The claim is the whole point of this card, so the thread has
+        # to be registered or "reply ME" is a lie twice over.
+        if thread_id and thread_id != "posted":
+
+            failed_at = time.time()
+
+            THREAD_CALLS[thread_id] = {
+                "call_id": call_id,
+                "mapped_at": failed_at,
+            }
+
+            LATEST_CALLS[space_name] = {
+                "call_id": call_id,
+                "thread_id": thread_id,
+                "mapped_at": failed_at,
+            }
+
+
+        # A transfer that failed is not a claim. Releasing it lets the
+        # next person win the call -- otherwise the lock from the first
+        # attempt blocks every rescue.
+        CLAIMED_CALLS.pop(call_id, None)
+
+
+        logging.info(
+            "TRANSFER_FAILED "
+            "call_id=%s tried=%s asked_for=%s thread=%s",
+            call_id,
+            tried or "(not sent)",
+            asked_for or "(none)",
+            thread_id or "(not posted)",
+        )
+
+
+        return (
+            json.dumps({
+                "success": True,
+                "posted": bool(thread_id),
+                "tried": tried,
+            }),
+            200,
+            {
+                "Content-Type":
+                    "application/json"
+            },
+        )
+
+
     if payload.get("action") == "map_thread":
 
         thread_id = str(
