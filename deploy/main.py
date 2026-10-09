@@ -3696,9 +3696,14 @@ def hello_http(request):
 
 
         lines.append("")
+        # No "Reply ME" here. The agent transfers on the request rather
+        # than waiting to be claimed, so the card that follows this one
+        # says the seller is already through -- and a rep acting on an
+        # instruction the next card contradicts trusts the next one
+        # less. The claim prompt belongs on cards where claiming still
+        # does something.
         lines.append(
-            "\U0001F4DE Reply \"ME\" within 2 minutes "
-            "to take the call."
+            "Handing them to a person now."
         )
         lines.append("")
         lines.append(MENTION_ALL)
