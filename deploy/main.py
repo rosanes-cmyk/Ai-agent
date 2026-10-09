@@ -1440,10 +1440,12 @@ def send_claimed_notification(
     # Only include seller fields that have an actual value.
     # Unknown fields are hidden instead of showing "Being collected".
     lines = [
-        "\U0001F7E2 *LIVE CALL CLAIMED*",
+        "\U0001F7E1 *LIVE CALL CLAIMED \u2014 CONNECTING*",
         "",
         "\U0001F64B *Claimed By:* " + claimed_by,
-        "\U0001F534 *Status:* Preparing live transfer",
+        "\U0001F504 *Status:* Transferring to "
+        + claimed_by
+        + " now",
         "",
     ]
 
@@ -2890,6 +2892,221 @@ def hello_http(request):
         )
 
 
+    # =====================================================
+    # NOTIFICATION #3 - THE TRANSFER RESULT
+    #
+    # The claim card says "Transferring to Cherry now" and, until
+    # this existed, that was the last thing the team ever heard. A
+    # transfer that failed - no phone number on the roster, Retell
+    # refusing it, the seller hanging up while the agent handed over
+    # - looked exactly like a transfer that worked. The seller was
+    # gone and nobody knew to ring them back.
+    #
+    # Retell names the outcome in disconnection_reason. Only
+    # "call_transfer" means the seller actually reached a person;
+    # every other ending, on a call somebody claimed, is a seller
+    # who was promised a human and did not get one.
+    # =====================================================
+
+    if payload.get("action") == "transfer_complete":
+
+        call_id = str(
+            payload.get(
+                "call_id",
+                "",
+            )
+        ).strip()
+
+
+        if not call_id:
+
+            logging.error(
+                "TRANSFER_RESULT_MISSING_CALL_ID"
+            )
+
+
+            return (
+                json.dumps({
+                    "success": False,
+                    "error": "call_id missing",
+                }),
+                400,
+                {
+                    "Content-Type":
+                        "application/json"
+                },
+            )
+
+
+        claim = CLAIMED_CALLS.get(call_id)
+
+
+        # Nobody claimed this call, so there is no promise to report
+        # on. The AI handling a call to the end is the normal case,
+        # not an event worth a card.
+
+        if not claim:
+
+            logging.info(
+                "TRANSFER_RESULT_UNCLAIMED call_id=%s",
+                call_id,
+            )
+
+
+            return (
+                json.dumps({
+                    "success": True,
+                    "posted": False,
+                    "reason": "call was never claimed",
+                }),
+                200,
+                {
+                    "Content-Type":
+                        "application/json"
+                },
+            )
+
+
+        thread_id = str(
+            claim.get("thread_id", "")
+        ).strip()
+
+
+        space_name = (
+            space_from_resource(thread_id)
+            or claim.get("space")
+            or OTHER_LEADS_SPACE
+        )
+
+
+        claimed_by = str(
+            claim.get("claimed_by", "")
+        ).strip() or "the claimant"
+
+
+        reason = str(
+            payload.get(
+                "disconnection_reason",
+                "",
+            )
+        ).strip()
+
+
+        transferred = reason == "call_transfer"
+
+
+        if transferred:
+
+            lines = [
+                "\U0001F7E2 *TRANSFERRED \u2014 "
+                + claimed_by.upper()
+                + " IS ON THE CALL*",
+                "",
+                "The seller is speaking with "
+                + claimed_by
+                + " now.",
+                "The Voice AI has left the call.",
+            ]
+
+
+        else:
+
+            lines = [
+                "\u26A0\uFE0F *TRANSFER DID NOT CONNECT*",
+                "",
+                claimed_by
+                + " claimed this call, but the seller was "
+                + "never put through.",
+            ]
+
+
+            caller = _clean_live_value(
+                get_call_data(call_id).get("phone")
+            )
+
+
+            if caller:
+                lines.append(
+                    "\U0001F4DE *Call them back:* " + caller
+                )
+
+
+            if reason:
+                lines.append(
+                    "\U0001F4CB *Ended by:* " + reason
+                )
+
+
+            lines.append("")
+            lines.append(
+                "Nobody else can claim this call now \u2014 "
+                "ring the seller yourself."
+            )
+
+
+            lines.append(MENTION_ALL)
+
+
+        lines.append("")
+        lines.append("Ref: " + call_id)
+
+
+        posted = False
+
+
+        if thread_id:
+
+            posted = post_thread_reply(
+                space_name,
+                thread_id,
+                "\n".join(lines),
+            )
+
+
+        else:
+
+            # A claim with no thread predates this field, or came
+            # through a path that never recorded one. Say so rather
+            # than dropping a failed transfer in silence.
+
+            logging.error(
+                "TRANSFER_RESULT_NO_THREAD "
+                "call_id=%s claimed_by=%s transferred=%s",
+                call_id,
+                claimed_by,
+                transferred,
+            )
+
+
+        logging.info(
+            "TRANSFER_RESULT "
+            "call_id=%s claimed_by=%s reason=%s "
+            "transferred=%s posted=%s",
+            call_id,
+            claimed_by,
+            reason or "(not sent)",
+            transferred,
+            posted,
+        )
+
+
+        CLAIMED_CALLS.pop(call_id, None)
+
+
+        return (
+            json.dumps({
+                "success": True,
+                "posted": posted,
+                "transferred": transferred,
+            }),
+            200,
+            {
+                "Content-Type":
+                    "application/json"
+            },
+        )
+
+
     if payload.get("action") == "map_thread":
 
         thread_id = str(
@@ -3552,6 +3769,11 @@ def hello_http(request):
         "sender_id": sender_id,
         "claim_text": normalized_text,
         "space": space_name,
+        # Noted so the transfer result can be posted under the same
+        # card the claim was typed in. Without it the only way back to
+        # the thread is the newest-card-in-the-space guess the Spanish
+        # handover uses, which is right until two sellers call at once.
+        "thread_id": thread_id,
     }
 
 
