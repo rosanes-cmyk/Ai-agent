@@ -1175,6 +1175,10 @@ LIVE_DATA_FIELDS = (
     "reason",
     "timeline",
     "asking_price",
+    # Who the seller asked for by name. Carried with the rest so the
+    # request card and the transfer card can both use it -- the agent
+    # reports it once, when it hears it.
+    "asked_for",
 )
 
 LIVE_DATA_ALIASES = {
@@ -1186,6 +1190,12 @@ LIVE_DATA_ALIASES = {
     "reason": ("reason", "reason_for_calling", "call_reason", "motivation"),
     "timeline": ("timeline", "selling_timeline"),
     "asking_price": ("asking_price", "price", "desired_price"),
+    "asked_for": (
+        "asked_for",
+        "requested_person",
+        "asked_for_name",
+        "requested_agent",
+    ),
 }
 
 
@@ -1759,6 +1769,32 @@ def post_auto_transfer(call_id, payload, space_name):
         lines.append(
             "\U0001F4DE *Transferred to:* " + str(destination)
         )
+
+
+    asked_for = _clean_live_value(
+        call_data.get("asked_for")
+    ).replace("*", "")
+
+
+    if asked_for:
+
+        lines.append(
+            "\U0001F5E3\uFE0F *Asked for:* " + asked_for
+        )
+
+
+        # The seller named somebody and the call went elsewhere. Worth
+        # a line, because the rep who picks up is about to be asked for
+        # a colleague and would rather know before the seller says it.
+        if who and who.strip().lower() != asked_for.strip().lower():
+
+            lines.append(
+                "\u26A0\uFE0F *They asked for "
+                + asked_for
+                + ", not "
+                + who
+                + ".*"
+            )
 
 
     for field, label in (
@@ -3685,6 +3721,7 @@ def hello_http(request):
             ("phone", "\U0001F4DE *Phone:*"),
             ("property", "\U0001F3E0 *Property:*"),
             ("reason", "\U0001F4DD *Reason:*"),
+            ("asked_for", "\U0001F5E3\uFE0F *Asked for:*"),
         ):
 
             value = _clean_live_value(
