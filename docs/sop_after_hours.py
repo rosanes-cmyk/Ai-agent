@@ -13,9 +13,26 @@ from build_sops import (
     S, build, bullets, callout, flow_steps, para, table,
 )
 from reportlab.lib.units import inch
-from reportlab.platypus import Spacer
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Image, PageBreak, Spacer
 
 VERIFIED = "5 November 2026"
+
+
+def shot(name, caption, width=5.6):
+    """A screenshot, scaled to the page, with what it proves written under it.
+
+    Cropped before it got here. The Cloud Run shot in particular is trimmed
+    to the one row that matters: the two webhook values above it are already
+    cut off by the field edge, but a credential half-shown in a document that
+    gets forwarded is still a credential half-shown.
+    """
+    img = ImageReader("proof/%s.png" % name)
+    w, h = img.getSize()
+    out = Image("proof/%s.png" % name, width=width * inch,
+                height=width * inch * h / w)
+    out.hAlign = "LEFT"
+    return [out, Spacer(1, 4), para(caption, "note"), Spacer(1, 12)]
 
 
 def heading(text):
@@ -163,6 +180,40 @@ story += [
         "answering service, start there.",
     ),
 ]
+
+story += [PageBreak(), heading("The proof")]
+story += [para(
+    "Taken on %s, in the order the checks were run. Anyone repeating them "
+    "should see the same three things." % VERIFIED
+), Spacer(1, 10)]
+
+story += shot(
+    "1-cloudrun",
+    "<b>Check 2.</b> Cloud Run, Variables and Secrets. AFTER_HOURS_AGENT_ID "
+    "is set, and this is the value the next shot has to match. Cropped to "
+    "this row on purpose.",
+)
+story += shot(
+    "2-retell-agent",
+    "<b>Check 2, matched.</b> The browser's address bar on the live agent. "
+    "The id matches, and the agent is THB After Hours - SAS Handoff. There "
+    "is a second agent with a similar name that does NOT match, so the name "
+    "alone proves nothing.",
+    width=6.2,
+)
+story += shot(
+    "3-transfer-number",
+    "<b>Check 1.</b> The transfer_to_sas function on that agent. The "
+    "destination is +1 408 868 5175, and Cold Transfer is correct here - the "
+    "answering service needs the call, not a briefing.",
+)
+story += [para(
+    "<b>Check 3</b> left no screenshot because it was not a screen. The "
+    "listener was asked the time directly and answered 9 AM, Thursday, "
+    "office_open: yes - which is only true if the hours are the real ones. "
+    "A test override would have returned closed.",
+)]
+
 
 build(
     "THB_After_Hours_Handoff.pdf",
