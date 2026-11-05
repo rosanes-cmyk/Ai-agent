@@ -128,6 +128,15 @@ OPEN_GREETING = (
 
 CLOSED_GREETING = "One moment, connecting you."
 
+# Where a call goes when nobody is covering. Named here so the
+# listener can hand the agent a destination rather than the agent
+# holding one of its own -- the evening rota changes who answers,
+# and only one of the two places should have to know.
+ANSWERING_SERVICE_NUMBER = os.environ.get(
+    "ANSWERING_SERVICE_NUMBER",
+    "+14088685175",
+).strip()
+
 
 # The agent that answers out-of-hours calls, if one is configured.
 #
@@ -183,6 +192,96 @@ def _log_clock_settings():
     )
 
 
+# =========================================================
+# THE EVENING DUTY ROTA
+#
+# Between the end of the shift and ten at night one named person
+# takes the calls, rather than the answering service taking all of
+# them. A seller who reaches a person at seven is worth more than the
+# same seller reaching a message service, and the rota is how that
+# happens without anybody sitting at a desk.
+#
+# The names live in a setting, not in this file, because a rota is the
+# most changeable thing in an office -- holidays, sickness, somebody
+# leaving -- and none of those should need a deploy.
+#
+#   DUTY_ROSTER = {"Monday": "Cherry", "Tuesday": "Thea", ...}
+#
+# A day nobody covers is not an error. It falls through to the
+# answering service, which is where the call went before this existed.
+# =========================================================
+
+DUTY_STARTS_HOUR = _hour_setting("DUTY_STARTS_HOUR", 18)
+DUTY_ENDS_HOUR = _hour_setting("DUTY_ENDS_HOUR", 22)
+
+
+def _load_duty_roster():
+
+    raw = os.environ.get("DUTY_ROSTER", "").strip()
+
+
+    if not raw:
+
+        logging.info("DUTY_ROSTER_NOT_SET")
+
+        return {}
+
+
+    try:
+        people = json.loads(raw)
+    except ValueError as error:
+        logging.error(
+            "DUTY_ROSTER_NOT_JSON error=%s",
+            error,
+        )
+        return {}
+
+
+    if not isinstance(people, dict):
+        logging.error("DUTY_ROSTER_NOT_AN_OBJECT")
+        return {}
+
+
+    # Monday and monday and MONDAY all mean Monday. A rota typed by a
+    # person should not fail on capitals.
+    cleaned = {
+        str(day).strip().title(): str(name).strip()
+        for day, name in people.items()
+        if str(name).strip()
+    }
+
+
+    logging.info(
+        "DUTY_ROSTER_LOADED days=%s",
+        ",".join(sorted(cleaned)) or "none",
+    )
+
+
+    return cleaned
+
+
+DUTY_ROSTER = _load_duty_roster()
+
+
+def duty_phone_for(name):
+    """The duty person's number, from the same roster that claims use."""
+
+    wanted = str(name or "").strip().lower()
+
+
+    if not wanted:
+        return ""
+
+
+    for record in CLAIMANTS.values():
+
+        if str(record.get("name") or "").strip().lower() == wanted:
+            return str(record.get("phone") or "").strip()
+
+
+    return ""
+
+
 def office_clock(now=None):
     """The time the voice agent should believe, in the office's timezone.
 
@@ -206,12 +305,50 @@ def office_clock(now=None):
         and OFFICE_OPENS_HOUR <= hour < OFFICE_CLOSES_HOUR
     )
 
+    # The third state. Not open -- nobody is at a desk -- but not the
+    # answering service either: one named person is covering.
+    on_duty = ""
+    duty_phone = ""
+
+
+    if (
+        not is_open
+        and day not in OFFICE_CLOSED_DAYS
+        and DUTY_STARTS_HOUR <= hour < DUTY_ENDS_HOUR
+    ):
+
+        on_duty = DUTY_ROSTER.get(day, "")
+
+        if on_duty:
+
+            duty_phone = duty_phone_for(on_duty)
+
+            # Named on the rota with no number against them. Saying so
+            # matters more than it looks: without this the call goes to
+            # the answering service and everything appears to work,
+            # while the person who agreed to cover the evening is never
+            # rung and never finds out.
+            if not duty_phone:
+                logging.error(
+                    "DUTY_PERSON_HAS_NO_PHONE day=%s name=%s",
+                    day,
+                    on_duty,
+                )
+                on_duty = ""
+
+
     return {
         "current_hour": str(hour),
         "current_day": day,
         "current_time": now.strftime("%-I:%M %p"),
         "office_open": "yes" if is_open else "no",
         "greeting": OPEN_GREETING if is_open else CLOSED_GREETING,
+        # Who the agent should dial. Always a real destination: the duty
+        # person while somebody is covering, the answering service the
+        # rest of the time. The agent never has to decide.
+        "on_duty": on_duty,
+        "transfer_target": duty_phone or ANSWERING_SERVICE_NUMBER,
+        "transfer_to_duty": "yes" if duty_phone else "no",
     }
 
 
@@ -1616,10 +1753,21 @@ def send_after_hours_notice(clock, from_number):
     caller = str(from_number or "").strip()
 
     lines = [
-        "\U0001F319 *AFTER HOURS \u2014 HANDING TO THE ANSWERING SERVICE*",
+        "\U0001F319 *AFTER HOURS \u2014 HANDING TO "
+        + (
+            str(clock.get("on_duty") or "").strip().upper()
+            if str(clock.get("on_duty") or "").strip()
+            else "THE ANSWERING SERVICE"
+        )
+        + "*",
         "",
         "A seller called outside the 8-5 shift.",
-        "The Voice AI is passing them to a live answering service now.",
+        (
+            "The Voice AI is passing them to the person on duty now."
+            if str(clock.get("on_duty") or "").strip()
+            else "The Voice AI is passing them to a live answering "
+                 "service now."
+        ),
         "",
     ]
 
@@ -1634,9 +1782,27 @@ def send_after_hours_notice(clock, from_number):
     )
 
     lines.append("")
-    lines.append(
-        "No action needed now \u2014 the message reaches you in the morning."
-    )
+
+
+    on_duty = str(clock.get("on_duty") or "").strip()
+
+
+    if on_duty:
+
+        lines.append(
+            "\U0001F64B *On duty:* " + on_duty
+        )
+        lines.append(
+            "Ringing them now. If they do not pick up, the "
+            "answering service takes it."
+        )
+
+    else:
+
+        lines.append(
+            "No action needed now \u2014 the message reaches "
+            "you in the morning."
+        )
 
     request = urllib.request.Request(
         webhook_url,
@@ -2795,11 +2961,19 @@ def hello_http(request):
         if not isinstance(inbound, dict):
             inbound = {}
 
+        # Who this call is about to be handed to, written down before it
+        # happens. An evening seller who reached nobody is otherwise a
+        # question with no answer: was the rota wrong, was the number
+        # missing, or did the duty person simply not pick up? This line
+        # settles the first two.
         logging.info(
-            "CALL_INBOUND_CLOCK day=%s hour=%s open=%s from=%s",
+            "CALL_INBOUND_CLOCK "
+            "day=%s hour=%s open=%s on_duty=%s dials=%s from=%s",
             clock["current_day"],
             clock["current_hour"],
             clock["office_open"],
+            clock["on_duty"] or "(nobody)",
+            clock["transfer_target"],
             inbound.get("from_number", ""),
         )
 
